@@ -1,0 +1,606 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ChevronRight,
+  ListPlus,
+  NotebookPen,
+  ShoppingBasket,
+  X,
+} from "lucide-react";
+import {
+  ApiError,
+  errorText,
+  post,
+  type Category,
+  type Transaction,
+  type TransactionList,
+} from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import {
+  basketTotal,
+  bumpUsage,
+  canAdd,
+  invalidKeys,
+  MAX_BASKET,
+  toPayload,
+  topUsed,
+  type BasketItem,
+} from "@/lib/basket";
+import {
+  formatAmountInput,
+  money,
+  parseAmount,
+  today,
+  yesterday,
+  dateLabel,
+} from "@/lib/format";
+import { readJSON, writeJSON } from "@/lib/storage";
+import { useData } from "@/lib/use-data";
+import { AmountInput, currencyLabel } from "@/components/amount-input";
+import { CategoryEditor } from "@/components/category-editor";
+import { CategoryGrid } from "@/components/category-grid";
+import { CategoryIcon } from "@/components/category-icon";
+import { Sheet } from "@/components/sheet";
+import { TransactionEditor } from "@/components/transaction-editor";
+import {
+  Alert,
+  ErrorState,
+  ListSkeleton,
+  Money,
+  Row,
+  Skeleton,
+  TypeToggle,
+} from "@/components/ui";
+import { useToast } from "@/components/toast";
+
+const USAGE_KEY = "mm_category_usage";
+const QUICK_AMOUNTS = [
+  "5000",
+  "10000",
+  "20000",
+  "30000",
+  "40000",
+  "50000",
+  "100000",
+];
+
+export default function EntryPage() {
+  const router = useRouter();
+  const toast = useToast();
+  const { user } = useAuth();
+  const currency = currencyLabel(user?.currency);
+  const cats = useData<Category[]>("/categories");
+  const todayStr = today();
+  const todays = useData<TransactionList>(
+    `/transactions?from=${todayStr}&to=${todayStr}&limit=5`,
+  );
+
+  const [type, setType] = useState<"expense" | "income">("expense");
+  const [categoryId, setCategoryId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(today());
+  const [note, setNote] = useState("");
+  const [showNote, setShowNote] = useState(false);
+  const [basket, setBasket] = useState<BasketItem[]>([]);
+  const [badKeys, setBadKeys] = useState<Set<string>>(new Set());
+  const [formError, setFormError] = useState<{
+    category?: boolean;
+    amount?: boolean;
+    text?: string;
+  }>({});
+  const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<Record<string, number>>({});
+  const [addingCategory, setAddingCategory] = useState(false);
+  const nextKey = useRef(0);
+
+  useEffect(() => {
+    // localStorage is only available after mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUsage(readJSON(USAGE_KEY, {}));
+  }, []);
+
+  const byId = useMemo(
+    () => new Map((cats.data ?? []).map((c) => [c.id, c])),
+    [cats.data],
+  );
+  const ordered = useMemo(() => {
+    const list = (cats.data ?? []).filter((c) => c.type === type);
+    const top = topUsed(usage, 4).filter((id) => byId.get(id)?.type === type);
+    return [
+      ...top.map((id) => byId.get(id)!),
+      ...list.filter((c) => !top.includes(c.id)),
+    ];
+  }, [cats.data, type, usage, byId]);
+
+  function switchType(t: "expense" | "income") {
+    setType(t);
+    setCategoryId("");
+    setFormError({});
+  }
+
+  /** Validates the form; returns the item or null after flagging what is missing. */
+  function currentItem(): BasketItem | null {
+    const value = parseAmount(amount);
+    const err = { category: !categoryId, amount: value === null };
+    if (err.category || err.amount) {
+      setFormError({
+        ...err,
+        text:
+          err.category && err.amount
+            ? "ເລືອກໝວດ ແລະ ໃສ່ຈຳນວນເງິນ"
+            : err.category
+              ? "ກະລຸນາເລືອກໝວດ"
+              : "ກະລຸນາໃສ່ຈຳນວນເງິນ",
+      });
+      return null;
+    }
+    setFormError({});
+    return {
+      key: String(nextKey.current++),
+      category_id: categoryId,
+      amount: value!,
+      txn_date: date,
+      ...(note.trim() ? { note: note.trim() } : {}),
+    };
+  }
+
+  function resetForm() {
+    setAmount("");
+    setNote("");
+    setShowNote(false);
+  }
+
+  function addToBasket() {
+    if (!canAdd(basket))
+      return setFormError({ text: `ໃສ່ໄດ້ສູງສຸດ ${MAX_BASKET} ລາຍການຕໍ່ຄັ້ງ` });
+    const item = currentItem();
+    if (!item) return;
+    setBasket((b) => [...b, item]);
+    resetForm();
+  }
+
+  function editBasketItem(item: BasketItem) {
+    setBasket((b) => b.filter((x) => x.key !== item.key));
+    setCategoryId(item.category_id);
+    setAmount(String(item.amount));
+    setDate(item.txn_date);
+    setNote(item.note ?? "");
+    setShowNote(!!item.note);
+    setBadKeys(new Set());
+  }
+
+  async function save() {
+    // The filled-in form counts as one more item; an empty form with a basket just saves the basket.
+    const formTouched = categoryId !== "" && amount !== "";
+    let items = basket;
+    if (type === "income" || basket.length === 0 || formTouched) {
+      const item = currentItem();
+      if (!item) return;
+      items = type === "income" ? [item] : [...basket, item];
+    }
+    if (items.length > MAX_BASKET)
+      return setFormError({
+        text: `ບັນທຶກໄດ້ສູງສຸດ ${MAX_BASKET} ລາຍການຕໍ່ຄັ້ງ`,
+      });
+
+    setBusy(true);
+    setBadKeys(new Set());
+    try {
+      let count = 1;
+      let total = items[0].amount;
+      if (type === "income") {
+        const it = items[0];
+        await post<Transaction>("/transactions", {
+          type: "income",
+          category_id: it.category_id,
+          amount: it.amount,
+          txn_date: it.txn_date,
+          note: it.note ?? null,
+        });
+      } else {
+        const res = await post<{ count: number; total: number }>(
+          "/expenses",
+          toPayload(items),
+        );
+        count = res.count;
+        total = res.total;
+      }
+      const nextUsage = bumpUsage(
+        usage,
+        items.map((i) => i.category_id),
+      );
+      setUsage(nextUsage);
+      writeJSON(USAGE_KEY, nextUsage);
+      navigator.vibrate?.(15);
+      toast(
+        count > 1
+          ? `ບັນທຶກແລ້ວ ${count} ລາຍການ ລວມ ${money(total)}`
+          : `ບັນທຶກ${type === "income" ? "ລາຍຮັບ" : "ລາຍຈ່າຍ"} ${money(total)} ແລ້ວ`,
+      );
+      setBasket([]);
+      resetForm();
+      todays.reload();
+    } catch (err) {
+      if (type === "expense" && err instanceof ApiError) {
+        if (basket.length !== items.length) {
+          // move the form item into the basket so the highlighted index matches what is shown
+          setBasket(items);
+          resetForm();
+        }
+        setBadKeys(invalidKeys(items, err.errors));
+      }
+      setFormError({ text: errorText(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const total = basketTotal(basket);
+  const isExpense = type === "expense";
+  const saveCount = basket.length + (categoryId && amount ? 1 : 0);
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <button
+          className="icon-btn -ml-2"
+          onClick={() => router.back()}
+          aria-label="ປິດ"
+        >
+          <X className="size-6" aria-hidden />
+        </button>
+        <h1 className="flex-1 text-lg font-semibold">ບັນທຶກ</h1>
+        <TypeToggle value={type} onChange={switchType} />
+      </div>
+
+      {cats.error && !cats.data ? (
+        <ErrorState message={cats.error} onRetry={cats.reload} />
+      ) : (
+        <>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save();
+            }}
+          >
+            <div className="flex flex-col gap-2">
+              <AmountInput
+                id="amount"
+                label="ຈຳນວນເງິນ"
+                value={amount}
+                onChange={setAmount}
+                large
+                currency={currency}
+                invalid={formError.amount}
+              />
+              <div
+                className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
+                aria-label="ຈຳນວນດ່ວນ"
+              >
+                {QUICK_AMOUNTS.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    className={`chip num shrink-0 ${amount === q ? "chip-on" : ""}`}
+                    onClick={() => setAmount(q)}
+                  >
+                    {formatAmountInput(q)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <section className="flex flex-col gap-2">
+              <h2 className="text-sm text-muted">ໝວດ</h2>
+              {cats.data ? (
+                <CategoryGrid
+                  categories={ordered}
+                  value={categoryId}
+                  onChange={(id) => {
+                    setCategoryId(id);
+                    setFormError((f) => ({ ...f, category: false }));
+                  }}
+                  invalid={formError.category}
+                  onAdd={() => setAddingCategory(true)}
+                />
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <Skeleton key={i} className="h-20" />
+                  ))}
+                </div>
+              )}
+              {cats.data && ordered.length === 0 && (
+                <p className="text-sm text-muted">
+                  ຍັງບໍ່ມີໝວດ{type === "income" ? "ລາຍຮັບ" : "ລາຍຈ່າຍ"} ກົດ
+                  “ເພີ່ມໝວດ” ເພື່ອສ້າງ
+                </p>
+              )}
+            </section>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={`chip ${date === today() ? "chip-on" : ""}`}
+                onClick={() => setDate(today())}
+              >
+                ມື້ນີ້
+              </button>
+              <button
+                type="button"
+                className={`chip ${date === yesterday() ? "chip-on" : ""}`}
+                onClick={() => setDate(yesterday())}
+              >
+                ມື້ວານ
+              </button>
+              <input
+                id="date"
+                aria-label="ເລືອກວັນທີ"
+                type="date"
+                className={`chip ${date !== today() && date !== yesterday() ? "chip-on" : ""}`}
+                value={date}
+                max={today()}
+                onChange={(e) => e.target.value && setDate(e.target.value)}
+              />
+              {!showNote && (
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() => setShowNote(true)}
+                >
+                  <NotebookPen className="size-4" aria-hidden />
+                  ໝາຍເຫດ
+                </button>
+              )}
+            </div>
+            {showNote && (
+              <input
+                id="note"
+                aria-label="ໝາຍເຫດ"
+                className="input"
+                maxLength={500}
+                placeholder="ໝາຍເຫດ (ບໍ່ບັງຄັບ)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                autoFocus
+              />
+            )}
+
+            <Alert>{formError.text}</Alert>
+
+            {isExpense && basket.length > 0 && (
+              <section
+                className="card flex flex-col gap-1 p-2"
+                aria-label="ລາຍການລໍຖ້າບັນທຶກ"
+              >
+                <div className="flex items-center justify-between px-2 py-1 text-sm">
+                  <span className="flex items-center gap-2 font-medium">
+                    <ShoppingBasket className="size-4 text-muted" aria-hidden />
+                    ລໍຖ້າບັນທຶກ {basket.length} ລາຍການ
+                  </span>
+                  <Money value={total} type="expense" />
+                </div>
+                <ul data-testid="basket">
+                  {basket.map((it) => {
+                    const c = byId.get(it.category_id);
+                    const bad = badKeys.has(it.key);
+                    return (
+                      <li
+                        key={it.key}
+                        data-invalid={bad || undefined}
+                        className={`flex items-center gap-1 rounded-xl ${bad ? "bg-expense-bg ring-1 ring-expense" : ""}`}
+                      >
+                        <button
+                          type="button"
+                          className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-2 text-left"
+                          onClick={() => editBasketItem(it)}
+                          aria-label={`ແກ້ໄຂ ${c?.name ?? ""} ${money(it.amount)}`}
+                        >
+                          <CategoryIcon
+                            icon={c?.icon}
+                            color={c?.color}
+                            name={c?.name ?? "?"}
+                            size="sm"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm">
+                              {c?.name ?? "ໝວດທີ່ຖືກລຶບ"}
+                            </span>
+                            <span className="block truncate text-xs text-muted">
+                              {it.txn_date !== today() &&
+                                dateLabel(it.txn_date)}
+                              {it.note && ` ${it.note}`}
+                            </span>
+                          </span>
+                          <Money value={it.amount} className="text-sm" />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() =>
+                            setBasket((b) => b.filter((x) => x.key !== it.key))
+                          }
+                          aria-label="ເອົາອອກ"
+                        >
+                          <X className="size-4" aria-hidden />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+
+            <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0">
+              <div className="mx-auto flex max-w-3xl gap-2">
+                {isExpense && (
+                  <button
+                    type="button"
+                    className="btn flex-1"
+                    onClick={addToBasket}
+                    disabled={busy}
+                  >
+                    <ListPlus className="size-5" aria-hidden />
+                    ເພີ່ມໃສ່ລາຍການ
+                  </button>
+                )}
+                <button className="btn btn-primary flex-1" disabled={busy}>
+                  {busy
+                    ? "ກຳລັງບັນທຶກ…"
+                    : isExpense && saveCount > 1
+                      ? `ບັນທຶກທັງໝົດ (${saveCount})`
+                      : "ບັນທຶກ"}
+                </button>
+              </div>
+            </div>
+          </form>
+          <TodayList
+            data={todays.data}
+            categories={cats.data ?? []}
+            currency={currency}
+            onChanged={todays.reload}
+          />
+        </>
+      )}
+
+      <Sheet
+        open={addingCategory}
+        onClose={() => setAddingCategory(false)}
+        title={`ເພີ່ມໝວດ${type === "income" ? "ລາຍຮັບ" : "ລາຍຈ່າຍ"}`}
+      >
+        {addingCategory && (
+          <CategoryEditor
+            category={null}
+            defaultType={type}
+            lockType
+            onDone={(created) => {
+              setAddingCategory(false);
+              if (created) {
+                // pick the new category right away so the entry can be saved without another tap
+                setCategoryId(created.id);
+                setFormError((f) => ({ ...f, category: false }));
+                cats.reload();
+              }
+            }}
+          />
+        )}
+      </Sheet>
+    </>
+  );
+}
+
+/** Today's entries under the form: confirms what was saved, avoids duplicates, tap to fix. */
+function TodayList({
+  data,
+  categories,
+  currency,
+  onChanged,
+}: {
+  data: TransactionList | null;
+  categories: Category[];
+  currency: string;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const byId = new Map(categories.map((c) => [c.id, c]));
+
+  return (
+    <section
+      className="card flex flex-col gap-1 p-2"
+      aria-label="ບັນທຶກມື້ນີ້"
+      data-testid="today-list"
+    >
+      <div className="flex items-baseline justify-between gap-2 px-2 pt-1">
+        <h2 className="font-semibold">
+          ບັນທຶກມື້ນີ້
+          {data && data.pagination.total > 0 && (
+            <span className="text-sm font-normal text-muted">
+              {" "}
+              · {data.pagination.total} ລາຍການ
+            </span>
+          )}
+        </h2>
+        {data && data.pagination.total > 0 && (
+          <span className="flex gap-2 text-sm">
+            {data.totals.income > 0 && (
+              <Money value={data.totals.income} type="income" sign />
+            )}
+            {data.totals.expense > 0 && (
+              <Money value={data.totals.expense} type="expense" sign />
+            )}
+          </span>
+        )}
+      </div>
+      {!data ? (
+        <div className="p-2">
+          <ListSkeleton rows={2} />
+        </div>
+      ) : data.items.length === 0 ? (
+        <p className="px-2 pb-2 text-sm text-muted">ຍັງບໍ່ມີລາຍການມື້ນີ້</p>
+      ) : (
+        <>
+          <ul>
+            {data.items.map((t) => {
+              const meta = byId.get(t.category_id);
+              return (
+                <li key={t.id}>
+                  <Row
+                    onClick={() => setEditing(t)}
+                    leading={
+                      <CategoryIcon
+                        icon={meta?.icon ?? t.category_icon}
+                        color={meta?.color ?? t.category_color}
+                        name={t.category_name}
+                        size="sm"
+                      />
+                    }
+                    title={t.category_name}
+                    subtitle={t.note ?? undefined}
+                    trailing={
+                      <Money
+                        value={t.amount}
+                        type={t.type}
+                        sign
+                        className="text-sm"
+                      />
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          {data.pagination.total > data.items.length && (
+            <Link
+              href="/transactions"
+              className="flex min-h-11 items-center justify-end gap-0.5 px-2 text-sm text-accent"
+            >
+              ເບິ່ງທັງໝົດ <ChevronRight className="size-4" aria-hidden />
+            </Link>
+          )}
+        </>
+      )}
+
+      <Sheet
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title="ແກ້ໄຂລາຍການ"
+      >
+        {editing && (
+          <TransactionEditor
+            txn={editing}
+            categories={categories}
+            currency={currency}
+            onDone={() => {
+              setEditing(null);
+              onChanged();
+            }}
+          />
+        )}
+      </Sheet>
+    </section>
+  );
+}

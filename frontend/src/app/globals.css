@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+/* Ledger-like palette: green for income, brick red for expense, ink blue for actions.
+   Category colors are soft tints (bg) with a readable foreground in each theme. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --sunken: #ecefeb;
+  --fg: #1a211d;
+  --muted: #5f6a63;
+  --line: #dce2db;
+  --income: #17704d;
+  --income-bg: #e2f2ea;
+  --expense: #b03f29;
+  --expense-bg: #f9e6e1;
+  --accent: #28578a;
+  --accent-bg: #e3ecf6;
+  --accent-fg: #ffffff;
+  --warn: #9a6212;
+  --warn-bg: #f8edd8;
+
+  --cat-green: #276b43;   --cat-green-bg: #e1f1e7;
+  --cat-teal: #1b7470;    --cat-teal-bg: #ddf0ef;
+  --cat-blue: #2c63a8;    --cat-blue-bg: #e1ebf8;
+  --cat-indigo: #4f54b5;  --cat-indigo-bg: #e7e8f8;
+  --cat-purple: #7a46a8;  --cat-purple-bg: #efe5f7;
+  --cat-pink: #b03f73;    --cat-pink-bg: #f8e3ee;
+  --cat-orange: #9c4616;  --cat-orange-bg: #fbe8dc;
+  --cat-amber: #7a5b09;   --cat-amber-bg: #f7efd2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111613;
+    --surface: #191f1b;
+    --sunken: #141915;
+    --fg: #e5ebe6;
+    --muted: #9aa69e;
+    --line: #2a332e;
+    --income: #5cc59a;
+    --income-bg: #173326;
+    --expense: #f08d76;
+    --expense-bg: #3a1f19;
+    --accent: #8db8e4;
+    --accent-bg: #1c2b3b;
+    --accent-fg: #0f1720;
+    --warn: #e7b65e;
+    --warn-bg: #352a14;
+
+    --cat-green: #79cf9a;   --cat-green-bg: #1b3325;
+    --cat-teal: #6cccc6;    --cat-teal-bg: #163331;
+    --cat-blue: #8db8ec;    --cat-blue-bg: #1b2a3d;
+    --cat-indigo: #a5a9f2;  --cat-indigo-bg: #24253f;
+    --cat-purple: #c9a3ec;  --cat-purple-bg: #2e2240;
+    --cat-pink: #ef9cc3;    --cat-pink-bg: #3b1f2d;
+    --cat-orange: #f3a77a;  --cat-orange-bg: #3b2519;
+    --cat-amber: #e2c46c;   --cat-amber-bg: #342c14;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-income: var(--income);
+  --color-income-bg: var(--income-bg);
+  --color-expense: var(--expense);
+  --color-expense-bg: var(--expense-bg);
+  --color-accent: var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-fg: var(--accent-fg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --font-sans: var(--font-noto-lao), "Noto Sans Lao", "Phetsarath OT", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* 16px stops iOS Safari from zooming into focused fields. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface p-4;
+  }
+  .input {
+    @apply min-h-11 w-full min-w-0 rounded-xl border border-line bg-sunken px-3 py-2 text-fg outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/30;
+  }
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 text-sm font-medium text-fg transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent text-accent-fg hover:opacity-90;
+  }
+  .btn-danger {
+    @apply border-expense bg-expense text-surface hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-muted hover:border-transparent hover:text-fg;
+  }
+  .icon-btn {
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-sunken hover:text-fg focus-visible:outline-2 focus-visible:outline-accent;
+  }
+  .chip {
+    @apply inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-sm text-fg transition;
+  }
+  .chip-on {
+    @apply border-accent bg-accent-bg font-medium text-accent;
+  }
+  .label {
+    @apply flex flex-col gap-1.5 text-sm text-muted;
+  }
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-sunken;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Bottom sheet (native <dialog>): slides up on phones, centered on wider screens. */
+dialog.sheet {
+  margin: auto auto 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 92dvh;
+  border-radius: 1.25rem 1.25rem 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+}
+dialog.sheet::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+dialog.sheet[open] {
+  animation: sheet-up 0.2s ease-out;
+}
+@media (min-width: 640px) {
+  dialog.sheet {
+    margin: auto;
+    max-width: 28rem;
+    border-radius: 1.25rem;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}

@@ -1,0 +1,23 @@
+# SITE_ADDRESS comes from .env:
+#   ":80"               plain HTTP on the server IP (no domain yet)
+#   "money.example.com" Caddy gets a Let's Encrypt certificate and serves HTTPS automatically
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# API goes straight to Go; everything else is the Next.js app
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+	handle /health {
+		reverse_proxy backend:8080
+	}
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

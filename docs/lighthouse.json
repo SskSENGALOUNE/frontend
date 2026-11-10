@@ -1,0 +1,67 @@
+{
+  "/login": {
+    "performance": 87,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "lcpMs": 1256,
+    "cls": 0,
+    "fcpMs": 709,
+    "tbtMs": 497,
+    "siMs": 842,
+    "failedAudits": [
+      "bf-cache"
+    ]
+  },
+  "/": {
+    "performance": 82,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "lcpMs": 2001,
+    "cls": 0,
+    "fcpMs": 689,
+    "tbtMs": 717,
+    "siMs": 1104,
+    "failedAudits": [
+      "bf-cache"
+    ]
+  },
+  "/entry": {
+    "performance": 84,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "lcpMs": 1634,
+    "cls": 0,
+    "fcpMs": 644,
+    "tbtMs": 602,
+    "siMs": 2477,
+    "failedAudits": [
+      "bf-cache"
+    ]
+  },
+  "/transactions": {
+    "performance": 99,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "lcpMs": 1225,
+    "cls": 0.064,
+    "fcpMs": 703,
+    "tbtMs": 78,
+    "siMs": 703,
+    "failedAudits": [
+      "bf-cache"
+    ]
+  },
+  "/budgets": {
+    "performance": 93,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "lcpMs": 1496,
+    "cls": 0,
+    "fcpMs": 675,
+    "tbtMs": 329,
+    "siMs": 909,
+    "failedAudits": [
+      "bf-cache"
+    ]
+  }
+}

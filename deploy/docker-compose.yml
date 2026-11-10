@@ -1,0 +1,70 @@
+# Money Manager: Postgres + Go API + Next.js behind Caddy.
+# Only Caddy is published (HTTP_PORT/HTTPS_PORT on BIND_ADDR; see .env.example).
+# The app images are built on the dev machine and loaded on the server by deploy/release.sh,
+# which also sets APP_TAG in .env. The server never builds anything.
+name: money-manager
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: money
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: money_manager
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U money -d money_manager"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    image: money-manager-backend:${APP_TAG:?APP_TAG is set by deploy/release.sh}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      APP_PORT: "8080"
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Vientiane}
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: money
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: money_manager
+      DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-72}
+      CORS_ORIGINS: "*"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: money-manager-frontend:${APP_TAG:?APP_TAG is set by deploy/release.sh}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # BIND_ADDR=127.0.0.1 keeps the app private, e.g. behind an existing nginx on the same server
+      - "${BIND_ADDR:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${BIND_ADDR:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
