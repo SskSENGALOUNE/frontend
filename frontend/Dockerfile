@@ -7,7 +7,9 @@ RUN npm ci --no-audit --no-fund
 FROM node:20-alpine AS build
 WORKDIR /app
 ARG BACKEND_URL=http://backend:8080
-ENV BACKEND_URL=$BACKEND_URL NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1
+# Release tag from deploy/release.sh; shown on the profile page as the deploy date.
+ARG APP_VERSION=dev
+ENV BACKEND_URL=$BACKEND_URL NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

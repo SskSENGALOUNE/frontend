@@ -18,7 +18,7 @@ trap 'rm -rf "$OUT"' EXIT
 
 echo "==> 1/4 build images ($PLATFORM, version $TAG)"
 docker build --platform "$PLATFORM" -t "money-manager-backend:$TAG" backend
-docker build --platform "$PLATFORM" -t "money-manager-frontend:$TAG" frontend
+docker build --platform "$PLATFORM" --build-arg "APP_VERSION=$TAG" -t "money-manager-frontend:$TAG" frontend
 
 echo "==> 2/4 export images"
 docker save "money-manager-backend:$TAG" "money-manager-frontend:$TAG" | gzip > "$OUT/images.tar.gz"
