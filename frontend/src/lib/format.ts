@@ -28,21 +28,26 @@ export function yesterday(now = new Date()): string {
 }
 
 /**
- * Salary arrives on the 25th, so a "month" is a pay period: 25th of the previous month to the 24th.
- * A period is named after the month it ends in: "2026-11" = 2026-10-25 .. 2026-11-24.
+ * A "month" is the user's pay period: from their pay day (1..28, user.pay_day) to the day before
+ * it in the next month, named after the month it ends in. Pay day 25: "2026-11" = 2026-10-25 ..
+ * 2026-11-24; pay day 5: 2026-10-05 .. 2026-11-04; pay day 1: the calendar month.
  */
-export const PAY_DAY = 25;
+export const DEFAULT_PAY_DAY = 25;
 
-/** The period that contains today: from the 25th on, that is next month's period. */
-export function currentMonth(now = new Date()): string {
+/** The period that contains today: from the pay day on, that is next month's period. */
+export function currentMonth(now = new Date(), payDay = DEFAULT_PAY_DAY): string {
   const month = today(now).slice(0, 7);
-  return now.getDate() >= PAY_DAY ? shiftMonth(month, 1) : month;
+  return payDay > 1 && now.getDate() >= payDay ? shiftMonth(month, 1) : month;
 }
 
-/** "2026-11" -> { from: "2026-10-25", to: "2026-11-24" } */
-export function monthRange(month: string): { from: string; to: string } {
+/** "2026-11" -> { from: "2026-10-25", to: "2026-11-24" } with pay day 25. */
+export function monthRange(month: string, payDay = DEFAULT_PAY_DAY): { from: string; to: string } {
   const pad = (d: number) => String(d).padStart(2, "0");
-  return { from: `${shiftMonth(month, -1)}-${pad(PAY_DAY)}`, to: `${month}-${pad(PAY_DAY - 1)}` };
+  if (payDay <= 1) {
+    const [y, m] = month.split("-").map(Number);
+    return { from: `${month}-01`, to: `${month}-${pad(new Date(y, m, 0).getDate())}` };
+  }
+  return { from: `${shiftMonth(month, -1)}-${pad(payDay)}`, to: `${month}-${pad(payDay - 1)}` };
 }
 
 export function shiftMonth(month: string, delta: number): string {
@@ -59,8 +64,8 @@ export function monthLabel(month: string): string {
 }
 
 /** "2026-11" -> "25/10 – 24/11", the dates a period covers. */
-export function monthRangeLabel(month: string): string {
-  const { from, to } = monthRange(month);
+export function monthRangeLabel(month: string, payDay = DEFAULT_PAY_DAY): string {
+  const { from, to } = monthRange(month, payDay);
   const short = (d: string) => `${Number(d.slice(8))}/${Number(d.slice(5, 7))}`;
   return `${short(from)} – ${short(to)}`;
 }

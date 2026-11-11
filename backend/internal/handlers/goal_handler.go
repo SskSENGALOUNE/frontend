@@ -13,20 +13,21 @@ import (
 )
 
 type GoalHandler struct {
+	users     payDayLookup
 	goals     *repositories.GoalRepository
 	txns      *repositories.TransactionRepository
 	recurring *repositories.RecurringRepository
 	loc       *time.Location
 }
 
-func NewGoalHandler(goals *repositories.GoalRepository, txns *repositories.TransactionRepository, recurring *repositories.RecurringRepository, loc *time.Location) *GoalHandler {
-	return &GoalHandler{goals: goals, txns: txns, recurring: recurring, loc: loc}
+func NewGoalHandler(users payDayLookup, goals *repositories.GoalRepository, txns *repositories.TransactionRepository, recurring *repositories.RecurringRepository, loc *time.Location) *GoalHandler {
+	return &GoalHandler{users: users, goals: goals, txns: txns, recurring: recurring, loc: loc}
 }
 
 type goalRequest struct {
 	Name         string  `json:"name" validate:"required,max=100"`
 	TargetAmount float64 `json:"target_amount" validate:"required,gt=0"`
-	// Automatic deposit on each payday; null or 0 means none.
+	// Automatic deposit on each payday (users.pay_day); null or 0 means none.
 	MonthlyAmount *float64 `json:"monthly_amount" validate:"omitempty,gte=0"`
 }
 
@@ -35,15 +36,6 @@ func (r goalRequest) monthly() *float64 {
 		return nil
 	}
 	return r.MonthlyAmount
-}
-
-// nextPayday returns the next payday on or after today in loc, as "YYYY-MM-DD".
-func nextPayday(now time.Time) string {
-	d := time.Date(now.Year(), now.Month(), payDay, 0, 0, 0, 0, time.UTC)
-	if now.Day() > payDay {
-		d = d.AddDate(0, 1, 0)
-	}
-	return d.Format(dateLayout)
 }
 
 func (h *GoalHandler) List(c *fiber.Ctx) error {
@@ -77,7 +69,7 @@ func (h *GoalHandler) Create(c *fiber.Ctx) error {
 	now := time.Now().In(h.loc)
 	g, err := h.goals.Create(c.Context(), &models.Goal{
 		UserID: middleware.UserID(c), Name: req.Name, TargetAmount: req.TargetAmount,
-	}, req.monthly(), nextPayday(now))
+	}, req.monthly(), nextPayday(now, userPayDay(c, h.users)))
 	if err != nil {
 		return repoError(c, err)
 	}
@@ -96,7 +88,7 @@ func (h *GoalHandler) Update(c *fiber.Ctx) error {
 	now := time.Now().In(h.loc)
 	g, err := h.goals.Update(c.Context(), &models.Goal{
 		ID: id, UserID: middleware.UserID(c), Name: req.Name, TargetAmount: req.TargetAmount,
-	}, req.monthly(), nextPayday(now), now)
+	}, req.monthly(), nextPayday(now, userPayDay(c, h.users)), now)
 	if err != nil {
 		return repoError(c, err)
 	}

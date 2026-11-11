@@ -11,18 +11,19 @@ import (
 )
 
 type ReportHandler struct {
-	repo *repositories.ReportRepository
-	loc  *time.Location
+	repo  *repositories.ReportRepository
+	users payDayLookup
+	loc   *time.Location
 }
 
-func NewReportHandler(repo *repositories.ReportRepository, loc *time.Location) *ReportHandler {
-	return &ReportHandler{repo: repo, loc: loc}
+func NewReportHandler(repo *repositories.ReportRepository, users payDayLookup, loc *time.Location) *ReportHandler {
+	return &ReportHandler{repo: repo, users: users, loc: loc}
 }
 
 // Summary: GET /reports/summary?from=&to=  (inclusive, defaults to current month)
 // Also returns the previous period (see previousRange) for comparison.
 func (h *ReportHandler) Summary(c *fiber.Ctx) error {
-	from, to, err := dateRange(c, h.loc)
+	from, to, err := dateRange(c, h.loc, userPayDay(c, h.users))
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -70,7 +71,7 @@ func (h *ReportHandler) ByCategory(c *fiber.Ctx) error {
 	if typ != "income" && typ != "expense" {
 		return response.Error(c, fiber.StatusBadRequest, "type must be income or expense")
 	}
-	from, to, err := dateRange(c, h.loc)
+	from, to, err := dateRange(c, h.loc, userPayDay(c, h.users))
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -88,7 +89,8 @@ func (h *ReportHandler) Trend(c *fiber.Ctx) error {
 	if period != "day" && period != "month" {
 		return response.Error(c, fiber.StatusBadRequest, "period must be day or month")
 	}
-	from, to, err := dateRange(c, h.loc)
+	payDay := userPayDay(c, h.users)
+	from, to, err := dateRange(c, h.loc, payDay)
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -97,7 +99,7 @@ func (h *ReportHandler) Trend(c *fiber.Ctx) error {
 	if period == "day" && t.Sub(f) > 366*24*time.Hour {
 		return response.Error(c, fiber.StatusBadRequest, "daily trend is limited to one year; use period=month")
 	}
-	items, err := h.repo.Trend(c.Context(), middleware.UserID(c), period, from, to)
+	items, err := h.repo.Trend(c.Context(), middleware.UserID(c), period, from, to, payDay)
 	if err != nil {
 		return repoError(c, err)
 	}
@@ -118,11 +120,12 @@ func (h *ReportHandler) FrequentAmounts(c *fiber.Ctx) error {
 // Budget: GET /reports/budget?month=YYYY-MM — budget vs actual spending per category
 // during that month's pay period (see periodRange).
 func (h *ReportHandler) Budget(c *fiber.Ctx) error {
-	month, ok := parseMonth(c.Query("month"), h.loc)
+	payDay := userPayDay(c, h.users)
+	month, ok := parseMonth(c.Query("month"), h.loc, payDay)
 	if !ok {
 		return response.Error(c, fiber.StatusBadRequest, "month must be YYYY-MM")
 	}
-	from, to := periodRange(month)
+	from, to := periodRange(month, payDay)
 	items, err := h.repo.BudgetStatus(c.Context(), middleware.UserID(c), month, from, to)
 	if err != nil {
 		return repoError(c, err)

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"log"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 
+	"money-manager/internal/middleware"
 	"money-manager/internal/repositories"
 	"money-manager/pkg/response"
 )
@@ -54,31 +56,59 @@ func isDate(s string) bool {
 // today returns the current date in loc as "YYYY-MM-DD".
 func today(loc *time.Location) string { return time.Now().In(loc).Format(dateLayout) }
 
-// payDay is the day salary arrives. A "month" in reports and budgets is the pay period that ends
-// in that month: month 2026-11 covers 2026-10-25 .. 2026-11-24.
-const payDay = repositories.PayDay
+// A "month" in reports and budgets is the user's pay period that ends in that month. With
+// pay day 25, month 2026-11 covers 2026-10-25 .. 2026-11-24; with pay day 1 it is the calendar
+// month. Pay days are 1..28 (users.pay_day), so every month has one.
+
+// payDayLookup reads a user's pay day; implemented by UserRepository.
+type payDayLookup interface {
+	PayDay(ctx context.Context, userID string) (int, error)
+}
+
+// userPayDay returns the signed-in user's pay day, or the default if it cannot be read.
+func userPayDay(c *fiber.Ctx, users payDayLookup) int {
+	d, err := users.PayDay(c.Context(), middleware.UserID(c))
+	if err != nil || d < 1 || d > 28 {
+		if err != nil {
+			log.Printf("pay day for %s: %v", middleware.UserID(c), err)
+		}
+		return repositories.DefaultPayDay
+	}
+	return d
+}
 
 // currentPeriodMonth returns the first day of the month whose pay period contains now.
-func currentPeriodMonth(loc *time.Location) time.Time {
-	now := time.Now().In(loc)
+func currentPeriodMonth(now time.Time, payDay int) time.Time {
 	m := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	if now.Day() >= payDay {
+	if payDay > 1 && now.Day() >= payDay {
 		m = m.AddDate(0, 1, 0)
 	}
 	return m
 }
 
 // periodRange returns the inclusive pay period of a month given as its first day ("YYYY-MM-01").
-func periodRange(month string) (string, string) {
+func periodRange(month string, payDay int) (string, string) {
 	m, _ := time.Parse(dateLayout, month)
+	if payDay <= 1 {
+		return m.Format(dateLayout), m.AddDate(0, 1, -1).Format(dateLayout)
+	}
 	return m.AddDate(0, -1, payDay-1).Format(dateLayout), m.AddDate(0, 0, payDay-2).Format(dateLayout)
+}
+
+// nextPayday returns the next payday on or after now, as "YYYY-MM-DD".
+func nextPayday(now time.Time, payDay int) string {
+	d := time.Date(now.Year(), now.Month(), payDay, 0, 0, 0, 0, time.UTC)
+	if now.Day() > payDay {
+		d = d.AddDate(0, 1, 0)
+	}
+	return d.Format(dateLayout)
 }
 
 // parseMonth accepts "YYYY-MM" or "YYYY-MM-DD" and returns the first day of that month.
 // Empty input means the month of the current pay period in loc.
-func parseMonth(s string, loc *time.Location) (string, bool) {
+func parseMonth(s string, loc *time.Location, payDay int) (string, bool) {
 	if s == "" {
-		return currentPeriodMonth(loc).Format(dateLayout), true
+		return currentPeriodMonth(time.Now().In(loc), payDay).Format(dateLayout), true
 	}
 	t, err := time.Parse("2006-01", s)
 	if err != nil {
@@ -90,8 +120,8 @@ func parseMonth(s string, loc *time.Location) (string, bool) {
 }
 
 // dateRange reads inclusive ?from=YYYY-MM-DD&to=YYYY-MM-DD, defaulting to the current pay period in loc.
-func dateRange(c *fiber.Ctx, loc *time.Location) (string, string, error) {
-	defFrom, defTo := periodRange(currentPeriodMonth(loc).Format(dateLayout))
+func dateRange(c *fiber.Ctx, loc *time.Location, payDay int) (string, string, error) {
+	defFrom, defTo := periodRange(currentPeriodMonth(time.Now().In(loc), payDay).Format(dateLayout), payDay)
 	from := c.Query("from", defFrom)
 	to := c.Query("to", defTo)
 

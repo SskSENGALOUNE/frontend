@@ -15,7 +15,8 @@ func TestPreviousRange(t *testing.T) {
 		{"2026-02-01", "2026-02-28", "2026-01-01", "2026-01-31"},
 		{"2026-01-01", "2026-03-31", "2025-10-01", "2025-12-31"},
 		{"2026-01-01", "2026-12-31", "2025-01-01", "2025-12-31"},
-		// pay periods (25th .. 24th) -> previous pay period(s)
+		// pay periods (25th .. 24th, 5th .. 4th) -> previous pay period(s)
+		{"2026-10-05", "2026-11-04", "2026-09-05", "2026-10-04"},
 		{"2026-10-25", "2026-11-24", "2026-09-25", "2026-10-24"},
 		{"2026-02-25", "2026-03-24", "2026-01-25", "2026-02-24"},
 		{"2026-12-25", "2027-01-24", "2026-11-25", "2026-12-24"},
@@ -33,14 +34,43 @@ func TestPreviousRange(t *testing.T) {
 }
 
 func TestPeriodRange(t *testing.T) {
-	cases := []struct{ month, wantFrom, wantTo string }{
-		{"2026-11-01", "2026-10-25", "2026-11-24"},
-		{"2026-03-01", "2026-02-25", "2026-03-24"},
-		{"2027-01-01", "2026-12-25", "2027-01-24"},
+	cases := []struct {
+		month          string
+		payDay         int
+		wantFrom, want string
+	}{
+		{"2026-11-01", 25, "2026-10-25", "2026-11-24"},
+		{"2026-03-01", 25, "2026-02-25", "2026-03-24"},
+		{"2027-01-01", 25, "2026-12-25", "2027-01-24"},
+		{"2026-11-01", 5, "2026-10-05", "2026-11-04"},
+		{"2026-03-01", 2, "2026-02-02", "2026-03-01"},
+		{"2026-02-01", 1, "2026-02-01", "2026-02-28"},
+		{"2026-03-01", 28, "2026-02-28", "2026-03-27"},
 	}
 	for _, c := range cases {
-		if f, to := periodRange(c.month); f != c.wantFrom || to != c.wantTo {
-			t.Errorf("periodRange(%s) = %s..%s, want %s..%s", c.month, f, to, c.wantFrom, c.wantTo)
+		if f, to := periodRange(c.month, c.payDay); f != c.wantFrom || to != c.want {
+			t.Errorf("periodRange(%s, %d) = %s..%s, want %s..%s", c.month, c.payDay, f, to, c.wantFrom, c.want)
+		}
+	}
+}
+
+func TestCurrentPeriodMonth(t *testing.T) {
+	cases := []struct {
+		now    string
+		payDay int
+		want   string
+	}{
+		{"2026-11-10", 25, "2026-11-01"},
+		{"2026-11-25", 25, "2026-12-01"},
+		{"2026-11-04", 5, "2026-11-01"},
+		{"2026-11-05", 5, "2026-12-01"},
+		{"2026-11-30", 1, "2026-11-01"},
+		{"2026-12-31", 5, "2027-01-01"},
+	}
+	for _, c := range cases {
+		now, _ := time.Parse(dateLayout, c.now)
+		if got := currentPeriodMonth(now, c.payDay).Format(dateLayout); got != c.want {
+			t.Errorf("currentPeriodMonth(%s, %d) = %s, want %s", c.now, c.payDay, got, c.want)
 		}
 	}
 }
@@ -54,7 +84,7 @@ func TestNextPayday(t *testing.T) {
 	}
 	for _, c := range cases {
 		now, _ := time.Parse(dateLayout, c.now)
-		if got := nextPayday(now); got != c.want {
+		if got := nextPayday(now, 25); got != c.want {
 			t.Errorf("nextPayday(%s) = %s, want %s", c.now, got, c.want)
 		}
 	}

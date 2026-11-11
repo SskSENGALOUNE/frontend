@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Copy, Plus, Target, Trash2 } from "lucide-react";
 import { del, errorText, post, put, type BudgetStatus, type Category } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { currentMonth, money, monthLabel, parseAmount, shiftMonth } from "@/lib/format";
+import { money, monthLabel, parseAmount, shiftMonth } from "@/lib/format";
+import { usePeriodMonth } from "@/lib/use-period";
 import { useData } from "@/lib/use-data";
 import { AmountInput, currencyLabel } from "@/components/amount-input";
 import { CategoryIcon } from "@/components/category-icon";
@@ -20,7 +21,7 @@ interface BudgetReport {
 export default function BudgetsPage() {
   const toast = useToast();
   const { user } = useAuth();
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = usePeriodMonth();
   const cats = useData<Category[]>("/categories?type=expense");
   const report = useData<BudgetReport>(`/reports/budget?month=${month}`);
   const [editing, setEditing] = useState<{ category: Category; status?: BudgetStatus } | null>(null);

@@ -11,9 +11,10 @@ import (
 	"money-manager/internal/models"
 )
 
-// PayDay is the day salary arrives. Reports group by the pay period that ends in a month
-// (month 2026-11 = 2026-10-25 .. 2026-11-24) and automatic goal deposits run on this day.
-const PayDay = 25
+// DefaultPayDay is a new user's pay-period start day (users.pay_day). Reports group by the
+// pay period that ends in a month (day 25: month 2026-11 = 2026-10-25 .. 2026-11-24) and
+// automatic goal deposits run on that day.
+const DefaultPayDay = 25
 
 // SavingsCategory is the expense category goal deposits are recorded in; created on first use.
 const SavingsCategory = "ເງິນອອມ"

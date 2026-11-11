@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { ArrowDownRight, ArrowUpRight, ChevronRight, NotebookPen, PiggyBank, Plus } from "lucide-react";
 import type { BudgetStatus, Category, CategoryTotal, Goal, PeriodTotal, Summary, TransactionList } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { currentMonth, dayHeading, money, monthRange, shiftMonth, today } from "@/lib/format";
+import { usePeriodMonth } from "@/lib/use-period";
 import { goalPercent } from "@/lib/goals";
 import { useData } from "@/lib/use-data";
 import { currencyLabel } from "@/components/amount-input";
@@ -24,8 +24,8 @@ interface BudgetRes {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [month, setMonth] = useState(currentMonth());
-  const { from, to } = monthRange(month);
+  const [month, setMonth, payDay] = usePeriodMonth();
+  const { from, to } = monthRange(month, payDay);
   const q = `from=${from}&to=${to}`;
 
   const sum = useData<SummaryRes>(`/reports/summary?${q}`);
@@ -35,9 +35,9 @@ export default function Dashboard() {
   const recent = useData<TransactionList>(`/transactions?${q}&limit=5`);
   const allCats = useData<Category[]>("/categories");
   // the 12 pay periods ending with the selected one, and the previous period for per-category change
-  const yearFrom = monthRange(shiftMonth(month, -11)).from;
+  const yearFrom = monthRange(shiftMonth(month, -11), payDay).from;
   const yearly = useData<{ items: PeriodTotal[] }>(`/reports/trend?period=month&from=${yearFrom}&to=${to}`);
-  const prev = monthRange(shiftMonth(month, -1));
+  const prev = monthRange(shiftMonth(month, -1), payDay);
   const prevCats = useData<{ items: CategoryTotal[] }>(`/reports/by-category?type=expense&from=${prev.from}&to=${prev.to}`);
   const goals = useData<Goal[]>("/goals");
   const prevTotal = new Map((prevCats.data?.items ?? []).map((c) => [c.category_id, c.total]));
@@ -102,7 +102,7 @@ export default function Dashboard() {
                   <h2 className="font-semibold">ລາຍຈ່າຍລາຍວັນ</h2>
                   {s && <span className="text-xs text-muted">ສະເລ່ຍ <span className="num">{money(Math.round(s.avg_daily_expense))}</span> / ມື້</span>}
                 </div>
-                {trend.data ? <ExpenseChart items={trend.data.items} today={month === currentMonth() ? today() : undefined} /> : <Skeleton className="h-40" />}
+                {trend.data ? <ExpenseChart items={trend.data.items} today={month === currentMonth(new Date(), payDay) ? today() : undefined} /> : <Skeleton className="h-40" />}
               </section>
 
               <section className="card flex flex-col gap-3">

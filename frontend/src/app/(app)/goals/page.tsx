@@ -4,7 +4,8 @@ import { useState } from "react";
 import { CalendarSync, PiggyBank, Plus, Trash2 } from "lucide-react";
 import { ApiError, del, errorText, post, put, type Goal } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { dateLabel, money, parseAmount, PAY_DAY } from "@/lib/format";
+import { dateLabel, money, parseAmount } from "@/lib/format";
+import { usePayDay } from "@/lib/use-period";
 import { goalPercent, paydaysLeft } from "@/lib/goals";
 import { useData } from "@/lib/use-data";
 import { AmountInput, currencyLabel } from "@/components/amount-input";
@@ -14,6 +15,7 @@ import { Alert, Bar, EmptyState, ErrorState, ListSkeleton, Money, PageHeader } f
 
 export default function GoalsPage() {
   const { user } = useAuth();
+  const payDay = usePayDay();
   const currency = currencyLabel(user?.currency);
   const goals = useData<Goal[]>("/goals");
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
@@ -39,7 +41,7 @@ export default function GoalsPage() {
           <EmptyState
             icon={PiggyBank}
             title="ຍັງບໍ່ມີເປົ້າໝາຍ"
-            text={`ຕັ້ງເປົ້າ ເຊັ່ນ ຊື້ໂທລະສັບ 10 ລ້ານ ແລ້ວໃຫ້ລະບົບກັນເງິນອອມໃຫ້ທຸກວັນທີ ${PAY_DAY}`}
+            text={`ຕັ້ງເປົ້າ ເຊັ່ນ ຊື້ໂທລະສັບ 10 ລ້ານ ແລ້ວໃຫ້ລະບົບກັນເງິນອອມໃຫ້ທຸກວັນທີ ${payDay}`}
             action={
               <button className="btn btn-primary" onClick={() => setEditing("new")}>
                 <Plus className="size-5" aria-hidden />
@@ -90,6 +92,7 @@ export default function GoalsPage() {
 }
 
 function GoalCard({ goal: g, onEdit, onDeposit }: { goal: Goal; onEdit: () => void; onDeposit: () => void }) {
+  const payDay = usePayDay();
   const pct = goalPercent(g);
   const done = g.saved >= g.target_amount;
   const left = paydaysLeft(g);
@@ -113,7 +116,7 @@ function GoalCard({ goal: g, onEdit, onDeposit }: { goal: Goal; onEdit: () => vo
           {g.monthly_amount ? (
             <span className="inline-flex items-center gap-1">
               <CalendarSync className="size-3.5" aria-hidden />
-              ອັດຕະໂນມັດ <span className="num">{money(g.monthly_amount)}</span> ທຸກວັນທີ {PAY_DAY}
+              ອັດຕະໂນມັດ <span className="num">{money(g.monthly_amount)}</span> ທຸກວັນທີ {payDay}
             </span>
           ) : (
             <span>ບໍ່ມີການອອມອັດຕະໂນມັດ</span>
@@ -133,6 +136,7 @@ function GoalCard({ goal: g, onEdit, onDeposit }: { goal: Goal; onEdit: () => vo
 }
 
 function GoalEditor({ goal, currency, onDone }: { goal: Goal | null; currency: string; onDone: () => void }) {
+  const payDay = usePayDay();
   const toast = useToast();
   const [name, setName] = useState(goal?.name ?? "");
   const [target, setTarget] = useState(goal ? String(goal.target_amount) : "");
@@ -189,7 +193,7 @@ function GoalEditor({ goal, currency, onDone }: { goal: Goal | null; currency: s
 
       <label className="flex min-h-11 items-center gap-3">
         <input type="checkbox" className="size-5 accent-[var(--accent)]" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-        <span className="text-sm">ອອມອັດຕະໂນມັດທຸກວັນທີ {PAY_DAY} (ວັນເງິນເດືອນອອກ)</span>
+        <span className="text-sm">ອອມອັດຕະໂນມັດທຸກວັນທີ {payDay} (ວັນເງິນເດືອນອອກ)</span>
       </label>
       {auto && (
         <div className="flex flex-col gap-1">

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Plus, Repeat, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { errorText, get, type Category, type Transaction, type TransactionList } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { currentMonth, dayHeading, monthRange } from "@/lib/format";
+import { dayHeading, monthRange } from "@/lib/format";
+import { usePeriodMonth } from "@/lib/use-period";
 import { useData, useDebounced } from "@/lib/use-data";
 import { currencyLabel } from "@/components/amount-input";
 import { CategoryIcon } from "@/components/category-icon";
@@ -17,7 +18,7 @@ const LIMIT = 30;
 
 export default function TransactionsPage() {
   const { user } = useAuth();
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth, payDay] = usePeriodMonth();
   const [type, setType] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [search, setSearch] = useState("");
@@ -25,7 +26,7 @@ export default function TransactionsPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
-  const { from, to } = monthRange(month);
+  const { from, to } = monthRange(month, payDay);
   const params = new URLSearchParams({ from, to, limit: String(LIMIT) });
   if (type) params.set("type", type);
   if (categoryId) params.set("category_id", categoryId);

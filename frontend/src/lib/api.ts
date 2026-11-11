@@ -7,6 +7,8 @@ export interface User {
   name: string;
   email: string;
   currency: string;
+  /** first day of a pay period, 1..28 */
+  pay_day: number;
 }
 
 export interface Category {

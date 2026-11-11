@@ -10,6 +10,7 @@ type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
 	Currency     string    `json:"currency"`
+	PayDay       int       `json:"pay_day"` // first day of a pay period, 1..28
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

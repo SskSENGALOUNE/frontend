@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, type LucideIcon } from "lucide-react";
 import { monthLabel, monthRangeLabel, money, shiftMonth } from "@/lib/format";
+import { usePayDay } from "@/lib/use-period";
 
 export function Money({ value, type, sign, className = "" }: { value: number; type?: "income" | "expense"; sign?: boolean; className?: string }) {
   const color = type === "income" ? "text-income" : type === "expense" ? "text-expense" : "";
@@ -35,6 +36,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
 }
 
 export function MonthPicker({ value, onChange }: { value: string; onChange: (m: string) => void }) {
+  const payDay = usePayDay();
   return (
     <div className="flex items-center rounded-xl border border-line bg-surface">
       <button className="icon-btn" onClick={() => onChange(shiftMonth(value, -1))} aria-label="ເດືອນກ່ອນ">
@@ -42,7 +44,7 @@ export function MonthPicker({ value, onChange }: { value: string; onChange: (m: 
       </button>
       <span className="flex min-w-28 flex-col items-center leading-tight" aria-live="polite">
         <span className="text-sm font-medium" data-testid="month-label">{monthLabel(value)}</span>
-        <span className="num text-[11px] text-muted">{monthRangeLabel(value)}</span>
+        <span className="num text-[11px] text-muted">{monthRangeLabel(value, payDay)}</span>
       </span>
       <button className="icon-btn" onClick={() => onChange(shiftMonth(value, 1))} aria-label="ເດືອນຖັດໄປ">
         <ChevronRight className="size-5" aria-hidden />

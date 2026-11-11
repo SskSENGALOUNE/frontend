@@ -5,7 +5,8 @@ import { Rocket } from "lucide-react";
 import { errorText, put, type User } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { APP_VERSION, CHANGELOG, versionLabel } from "@/lib/changelog";
-import { Alert, PageHeader } from "@/components/ui";
+import { currentMonth, DEFAULT_PAY_DAY, monthLabel, monthRangeLabel } from "@/lib/format";
+import { Alert, ListSkeleton, PageHeader } from "@/components/ui";
 import { PasswordInput } from "@/components/password-input";
 import { useToast } from "@/components/toast";
 
@@ -16,29 +17,12 @@ const CURRENCIES = [
 ];
 
 export default function ProfilePage() {
-  const { user, setUser } = useAuth();
+  const { user } = useAuth();
   const toast = useToast();
-  const [name, setName] = useState(user?.name ?? "");
-  const [currency, setCurrency] = useState(user?.currency ?? "LAK");
-  const [profileError, setProfileError] = useState("");
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [pwError, setPwError] = useState("");
   const [busy, setBusy] = useState(false);
-
-  async function saveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setProfileError("");
-    try {
-      setUser(await put<User>("/me", { name: name.trim(), currency }));
-      toast("ບັນທຶກໂປຣໄຟລ໌ແລ້ວ");
-    } catch (err) {
-      setProfileError(errorText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -60,31 +44,14 @@ export default function ProfilePage() {
   return (
     <>
       <PageHeader title="ໂປຣໄຟລ໌" />
-      <form onSubmit={saveProfile} className="card flex flex-col gap-3">
-        <h2 className="font-semibold">ຂໍ້ມູນສ່ວນຕົວ</h2>
-        <label className="label">
-          ຊື່
-          <input id="profile-name" className="input" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className="label">
-          ອີເມວ
-          <input id="profile-email" className="input opacity-70" value={user?.email ?? ""} disabled />
-        </label>
-        <label className="label">
-          ສະກຸນເງິນ
-          <select id="profile-currency" className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-            {CURRENCIES.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Alert>{profileError}</Alert>
-        <button className="btn btn-primary" disabled={busy}>
-          ບັນທຶກ
-        </button>
-      </form>
+      {/* the form starts from the saved profile, so wait for it (a reload loads it after the page) */}
+      {user ? (
+        <ProfileForm key={user.id} user={user} />
+      ) : (
+        <div className="card">
+          <ListSkeleton rows={4} />
+        </div>
+      )}
 
       <form onSubmit={changePassword} className="card flex flex-col gap-3">
         <h2 className="font-semibold">ປ່ຽນລະຫັດຜ່ານ</h2>
@@ -133,5 +100,76 @@ function ReleaseNotes() {
         })}
       </ol>
     </section>
+  );
+}
+
+/** Explains what the chosen pay day means, using the current period as the example. */
+function payDayHint(day: number): string {
+  const month = currentMonth(new Date(), day);
+  const range = monthRangeLabel(month, day);
+  if (day === 1) return `ນັບຕາມເດືອນປົກກະຕິ ວັນທີ 1 ຫາ ທ້າຍເດືອນ · ຕອນນີ້: ${monthLabel(month)} (${range})`;
+  return `ນັບແຕ່ວັນທີ ${day} ຫາ ວັນທີ ${day - 1} ຂອງເດືອນຖັດໄປ · ຕອນນີ້: ${monthLabel(month)} (${range}). ການອອມອັດຕະໂນມັດຈະຍ້າຍໄປວັນທີ ${day} ນຳ`;
+}
+
+function ProfileForm({ user }: { user: User }) {
+  const { setUser } = useAuth();
+  const toast = useToast();
+  const [name, setName] = useState(user.name);
+  const [currency, setCurrency] = useState(user.currency);
+  const [payDay, setPayDay] = useState(user.pay_day ?? DEFAULT_PAY_DAY);
+  const [profileError, setProfileError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function saveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setProfileError("");
+    try {
+      setUser(await put<User>("/me", { name: name.trim(), currency, pay_day: payDay }));
+      toast("ບັນທຶກໂປຣໄຟລ໌ແລ້ວ");
+    } catch (err) {
+      setProfileError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+      <form onSubmit={saveProfile} className="card flex flex-col gap-3">
+        <h2 className="font-semibold">ຂໍ້ມູນສ່ວນຕົວ</h2>
+        <label className="label">
+          ຊື່
+          <input id="profile-name" className="input" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="label">
+          ອີເມວ
+          <input id="profile-email" className="input opacity-70" value={user.email} disabled />
+        </label>
+        <label className="label">
+          ສະກຸນເງິນ
+          <select id="profile-currency" className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {CURRENCIES.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="label">
+          ວັນເລີ່ມຮອບເດືອນ (ວັນເງິນເດືອນອອກ)
+          <select id="profile-pay-day" className="input" value={payDay} onChange={(e) => setPayDay(Number(e.target.value))}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                ວັນທີ {d}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs font-normal text-muted">{payDayHint(payDay)}</span>
+        </label>
+        <Alert>{profileError}</Alert>
+        <button className="btn btn-primary" disabled={busy}>
+          ບັນທຶກ
+        </button>
+      </form>
   );
 }

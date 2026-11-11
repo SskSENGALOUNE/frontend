@@ -18,10 +18,11 @@ type AuthHandler struct {
 	users     *repositories.UserRepository
 	jwtSecret string
 	jwtExpiry time.Duration
+	loc       *time.Location
 }
 
-func NewAuthHandler(users *repositories.UserRepository, secret string, expiry time.Duration) *AuthHandler {
-	return &AuthHandler{users: users, jwtSecret: secret, jwtExpiry: expiry}
+func NewAuthHandler(users *repositories.UserRepository, secret string, expiry time.Duration, loc *time.Location) *AuthHandler {
+	return &AuthHandler{users: users, jwtSecret: secret, jwtExpiry: expiry, loc: loc}
 }
 
 type registerRequest struct {
@@ -39,6 +40,8 @@ type loginRequest struct {
 type updateProfileRequest struct {
 	Name     string `json:"name" validate:"required,max=100"`
 	Currency string `json:"currency" validate:"required,len=3"`
+	// First day of a pay period; omitted keeps the current one.
+	PayDay *int `json:"pay_day" validate:"omitempty,min=1,max=28"`
 }
 
 type changePasswordRequest struct {
@@ -108,8 +111,10 @@ func (h *AuthHandler) UpdateProfile(c *fiber.Ctx) error {
 	if ok, err := middleware.BindAndValidate(c, &req); !ok {
 		return err
 	}
+	now := time.Now().In(h.loc)
 	user, err := h.users.Update(c.Context(), middleware.UserID(c),
-		strings.TrimSpace(req.Name), strings.ToUpper(req.Currency))
+		strings.TrimSpace(req.Name), strings.ToUpper(req.Currency), req.PayDay,
+		func(day int) string { return nextPayday(now, day) })
 	if err != nil {
 		return repoError(c, err)
 	}

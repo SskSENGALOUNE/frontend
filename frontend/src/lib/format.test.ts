@@ -37,6 +37,16 @@ describe("monthRange / shiftMonth", () => {
     expect(monthRange("2027-01")).toEqual({ from: "2026-12-25", to: "2027-01-24" });
     expect(monthRangeLabel("2026-11")).toBe("25/10 – 24/11");
   });
+  it("follows the pay day", () => {
+    expect(monthRange("2026-11", 5)).toEqual({ from: "2026-10-05", to: "2026-11-04" });
+    expect(monthRange("2026-02", 1)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(monthRange("2028-02", 1).to).toBe("2028-02-29");
+    expect(monthRange("2026-03", 28)).toEqual({ from: "2026-02-28", to: "2026-03-27" });
+    expect(monthRangeLabel("2026-11", 5)).toBe("5/10 – 4/11");
+    expect(currentMonth(new Date(2026, 10, 4), 5)).toBe("2026-11");
+    expect(currentMonth(new Date(2026, 10, 5), 5)).toBe("2026-12");
+    expect(currentMonth(new Date(2026, 10, 30), 1)).toBe("2026-11");
+  });
   it("picks the period containing today", () => {
     expect(currentMonth(new Date(2026, 10, 10))).toBe("2026-11");
     expect(currentMonth(new Date(2026, 10, 24))).toBe("2026-11");

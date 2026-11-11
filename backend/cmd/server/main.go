@@ -44,14 +44,14 @@ func main() {
 	cancel()
 
 	userRepo := repositories.NewUserRepository(pool)
-	authH := handlers.NewAuthHandler(userRepo, cfg.JWTSecret, cfg.JWTExpiry)
+	authH := handlers.NewAuthHandler(userRepo, cfg.JWTSecret, cfg.JWTExpiry, cfg.Timezone)
 	categoryH := handlers.NewCategoryHandler(repositories.NewCategoryRepository(pool))
 	txH := handlers.NewTransactionHandler(repositories.NewTransactionRepository(pool), cfg.Timezone)
-	reportH := handlers.NewReportHandler(repositories.NewReportRepository(pool), cfg.Timezone)
+	reportH := handlers.NewReportHandler(repositories.NewReportRepository(pool), userRepo, cfg.Timezone)
 	recurringRepo := repositories.NewRecurringRepository(pool)
 	recurringH := handlers.NewRecurringHandler(recurringRepo, cfg.Timezone)
-	budgetH := handlers.NewBudgetHandler(repositories.NewBudgetRepository(pool), cfg.Timezone)
-	goalH := handlers.NewGoalHandler(repositories.NewGoalRepository(pool), repositories.NewTransactionRepository(pool), recurringRepo, cfg.Timezone)
+	budgetH := handlers.NewBudgetHandler(repositories.NewBudgetRepository(pool), userRepo, cfg.Timezone)
+	goalH := handlers.NewGoalHandler(userRepo, repositories.NewGoalRepository(pool), repositories.NewTransactionRepository(pool), recurringRepo, cfg.Timezone)
 	favoriteH := handlers.NewFavoriteHandler(repositories.NewFavoriteRepository(pool))
 
 	workerCtx, stopWorker := context.WithCancel(context.Background())

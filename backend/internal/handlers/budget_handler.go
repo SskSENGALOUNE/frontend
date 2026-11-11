@@ -12,12 +12,13 @@ import (
 )
 
 type BudgetHandler struct {
-	repo *repositories.BudgetRepository
-	loc  *time.Location
+	repo  *repositories.BudgetRepository
+	users payDayLookup
+	loc   *time.Location
 }
 
-func NewBudgetHandler(repo *repositories.BudgetRepository, loc *time.Location) *BudgetHandler {
-	return &BudgetHandler{repo: repo, loc: loc}
+func NewBudgetHandler(repo *repositories.BudgetRepository, users payDayLookup, loc *time.Location) *BudgetHandler {
+	return &BudgetHandler{repo: repo, users: users, loc: loc}
 }
 
 type upsertBudgetRequest struct {
@@ -33,7 +34,7 @@ type copyBudgetRequest struct {
 
 // List: GET /budgets?month=YYYY-MM
 func (h *BudgetHandler) List(c *fiber.Ctx) error {
-	month, ok := parseMonth(c.Query("month"), h.loc)
+	month, ok := parseMonth(c.Query("month"), h.loc, userPayDay(c, h.users))
 	if !ok {
 		return response.Error(c, fiber.StatusBadRequest, "month must be YYYY-MM")
 	}
@@ -50,7 +51,7 @@ func (h *BudgetHandler) Upsert(c *fiber.Ctx) error {
 	if ok, err := middleware.BindAndValidate(c, &req); !ok {
 		return err
 	}
-	month, ok := parseMonth(req.Month, h.loc)
+	month, ok := parseMonth(req.Month, h.loc, userPayDay(c, h.users))
 	if !ok {
 		return response.Error(c, fiber.StatusBadRequest, "month must be YYYY-MM")
 	}
@@ -69,8 +70,9 @@ func (h *BudgetHandler) Copy(c *fiber.Ctx) error {
 	if ok, err := middleware.BindAndValidate(c, &req); !ok {
 		return err
 	}
-	from, ok1 := parseMonth(req.FromMonth, h.loc)
-	to, ok2 := parseMonth(req.ToMonth, h.loc)
+	payDay := userPayDay(c, h.users)
+	from, ok1 := parseMonth(req.FromMonth, h.loc, payDay)
+	to, ok2 := parseMonth(req.ToMonth, h.loc, payDay)
 	if !ok1 || !ok2 {
 		return response.Error(c, fiber.StatusBadRequest, "months must be YYYY-MM")
 	}

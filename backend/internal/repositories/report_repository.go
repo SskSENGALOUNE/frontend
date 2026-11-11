@@ -62,13 +62,17 @@ func (r *ReportRepository) ByCategory(ctx context.Context, userID, typ, from, to
 }
 
 // Trend returns one row per day or per pay period in the range, including periods with no
-// transactions. A pay period is named after the month it ends in ("2026-11" = Oct 25 .. Nov 24).
-func (r *ReportRepository) Trend(ctx context.Context, userID, period, from, to string) ([]models.PeriodTotal, error) {
+// transactions. A pay period starts on payDay (1..28) and is named after the month it ends in
+// (payDay 25: "2026-11" = Oct 25 .. Nov 24; payDay 1: calendar months).
+func (r *ReportRepository) Trend(ctx context.Context, userID, period, from, to string, payDay int) ([]models.PeriodTotal, error) {
 	// bucket maps a date to the first day of its day or pay-period month.
 	bucket, step, format := "%s::date", "1 day", "YYYY-MM-DD"
 	if period == "month" {
-		bucket = fmt.Sprintf("date_trunc('month', %%s - INTERVAL '%d days' + INTERVAL '1 month')::date", PayDay-1)
 		step, format = "1 month", "YYYY-MM"
+		bucket = "date_trunc('month', %s)::date"
+		if payDay > 1 {
+			bucket = fmt.Sprintf("date_trunc('month', %%s - INTERVAL '%d days' + INTERVAL '1 month')::date", payDay-1)
+		}
 	}
 	b := func(expr string) string { return fmt.Sprintf(bucket, expr) }
 	rows, err := r.db.Query(ctx, `
