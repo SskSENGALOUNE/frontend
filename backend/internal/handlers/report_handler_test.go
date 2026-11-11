@@ -1,6 +1,9 @@
 package handlers
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestPreviousRange(t *testing.T) {
 	cases := []struct{ from, to, wantFrom, wantTo string }{
@@ -38,6 +41,21 @@ func TestPeriodRange(t *testing.T) {
 	for _, c := range cases {
 		if f, to := periodRange(c.month); f != c.wantFrom || to != c.wantTo {
 			t.Errorf("periodRange(%s) = %s..%s, want %s..%s", c.month, f, to, c.wantFrom, c.wantTo)
+		}
+	}
+}
+
+func TestNextPayday(t *testing.T) {
+	cases := []struct{ now, want string }{
+		{"2026-11-10", "2026-11-25"},
+		{"2026-11-25", "2026-11-25"},
+		{"2026-11-26", "2026-12-25"},
+		{"2026-12-31", "2027-01-25"},
+	}
+	for _, c := range cases {
+		now, _ := time.Parse(dateLayout, c.now)
+		if got := nextPayday(now); got != c.want {
+			t.Errorf("nextPayday(%s) = %s, want %s", c.now, got, c.want)
 		}
 	}
 }

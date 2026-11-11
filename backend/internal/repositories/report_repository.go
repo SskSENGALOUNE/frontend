@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -60,27 +61,31 @@ func (r *ReportRepository) ByCategory(ctx context.Context, userID, typ, from, to
 	return out, rows.Err()
 }
 
-// Trend returns one row per day or month in the range, including periods with no transactions.
+// Trend returns one row per day or per pay period in the range, including periods with no
+// transactions. A pay period is named after the month it ends in ("2026-11" = Oct 25 .. Nov 24).
 func (r *ReportRepository) Trend(ctx context.Context, userID, period, from, to string) ([]models.PeriodTotal, error) {
-	step, format := "1 day", "YYYY-MM-DD"
+	// bucket maps a date to the first day of its day or pay-period month.
+	bucket, step, format := "%s::date", "1 day", "YYYY-MM-DD"
 	if period == "month" {
+		bucket = fmt.Sprintf("date_trunc('month', %%s - INTERVAL '%d days' + INTERVAL '1 month')::date", PayDay-1)
 		step, format = "1 month", "YYYY-MM"
 	}
+	b := func(expr string) string { return fmt.Sprintf(bucket, expr) }
 	rows, err := r.db.Query(ctx, `
 		WITH periods AS (
-		    SELECT generate_series(date_trunc($2::text, $4::date), $5::date, $3::interval)::date AS p
+		    SELECT generate_series(`+b("$2::date")+`, `+b("$3::date")+`, $4::interval)::date AS p
 		)
-		SELECT to_char(p.p, $6::text),
+		SELECT to_char(p.p, $5::text),
 		       COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'income'), 0),
 		       COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'expense'), 0)
 		FROM periods p
 		LEFT JOIN transactions t
 		       ON t.user_id = $1
-		      AND date_trunc($2::text, t.txn_date)::date = p.p
-		      AND t.txn_date BETWEEN $4::date AND $5::date
+		      AND `+b("t.txn_date")+` = p.p
+		      AND t.txn_date BETWEEN $2::date AND $3::date
 		GROUP BY p.p
 		ORDER BY p.p`,
-		userID, period, step, from, to, format)
+		userID, from, to, step, format)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +99,36 @@ func (r *ReportRepository) Trend(ctx context.Context, userID, period, from, to s
 		}
 		pt.Net = pt.Income - pt.Expense
 		out = append(out, pt)
+	}
+	return out, rows.Err()
+}
+
+// FrequentAmounts returns, per category, the (up to) limit amounts used most often since `since`,
+// ties broken by the most recently used; each list is sorted smallest first.
+func (r *ReportRepository) FrequentAmounts(ctx context.Context, userID, since string, limit int) ([]models.FrequentAmounts, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT category_id, array_agg(amount ORDER BY amount) FROM (
+		    SELECT category_id, amount,
+		           ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY COUNT(*) DESC, MAX(txn_date) DESC, amount) AS rn
+		    FROM transactions
+		    WHERE user_id = $1 AND txn_date >= $2::date
+		    GROUP BY category_id, amount
+		) s
+		WHERE rn <= $3
+		GROUP BY category_id`,
+		userID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []models.FrequentAmounts{}
+	for rows.Next() {
+		var f models.FrequentAmounts
+		if err := rows.Scan(&f.CategoryID, &f.Amounts); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
 	}
 	return out, rows.Err()
 }

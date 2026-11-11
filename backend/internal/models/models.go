@@ -37,6 +37,7 @@ type Transaction struct {
 	TxnDate       string    `json:"txn_date"`
 	Note          *string   `json:"note"`
 	RecurringID   *string   `json:"recurring_id"`
+	GoalID        *string   `json:"goal_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -120,4 +121,37 @@ type BudgetStatus struct {
 	Remaining    float64 `json:"remaining"`
 	Percent      float64 `json:"percent"`
 	OverBudget   bool    `json:"over_budget"`
+}
+
+// Goal is a savings target. Saved is the sum of the expense transactions tagged with it.
+type Goal struct {
+	ID           string  `json:"id"`
+	UserID       string  `json:"-"`
+	Name         string  `json:"name"`
+	TargetAmount float64 `json:"target_amount"`
+	CategoryID   string  `json:"category_id"`
+	Saved        float64 `json:"saved"`
+	DepositCount int     `json:"deposit_count"`
+	// Automatic deposit on each payday; nil when there is none.
+	MonthlyAmount *float64  `json:"monthly_amount"`
+	NextDeposit   *string   `json:"next_deposit"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type Favorite struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"-"`
+	Type         string    `json:"type"`
+	CategoryID   string    `json:"category_id"`
+	CategoryName string    `json:"category_name"`
+	Amount       float64   `json:"amount"`
+	Note         *string   `json:"note"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// FrequentAmounts lists a category's most used amounts, smallest first.
+type FrequentAmounts struct {
+	CategoryID string    `json:"category_id"`
+	Amounts    []float64 `json:"amounts"`
 }

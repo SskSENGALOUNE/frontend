@@ -51,6 +51,8 @@ func main() {
 	recurringRepo := repositories.NewRecurringRepository(pool)
 	recurringH := handlers.NewRecurringHandler(recurringRepo, cfg.Timezone)
 	budgetH := handlers.NewBudgetHandler(repositories.NewBudgetRepository(pool), cfg.Timezone)
+	goalH := handlers.NewGoalHandler(repositories.NewGoalRepository(pool), repositories.NewTransactionRepository(pool), recurringRepo, cfg.Timezone)
+	favoriteH := handlers.NewFavoriteHandler(repositories.NewFavoriteRepository(pool))
 
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
@@ -109,6 +111,7 @@ func main() {
 	protected.Get("/reports/by-category", reportH.ByCategory)
 	protected.Get("/reports/trend", reportH.Trend)
 	protected.Get("/reports/budget", reportH.Budget)
+	protected.Get("/reports/frequent-amounts", reportH.FrequentAmounts)
 
 	protected.Get("/recurring", recurringH.List)
 	protected.Post("/recurring", recurringH.Create)
@@ -120,6 +123,16 @@ func main() {
 	protected.Put("/budgets", budgetH.Upsert)
 	protected.Post("/budgets/copy", budgetH.Copy)
 	protected.Delete("/budgets/:id", budgetH.Delete)
+
+	protected.Get("/goals", goalH.List)
+	protected.Post("/goals", goalH.Create)
+	protected.Put("/goals/:id", goalH.Update)
+	protected.Delete("/goals/:id", goalH.Delete)
+	protected.Post("/goals/:id/deposits", goalH.Deposit)
+
+	protected.Get("/favorites", favoriteH.List)
+	protected.Post("/favorites", favoriteH.Create)
+	protected.Delete("/favorites/:id", favoriteH.Delete)
 
 	go func() {
 		if err := app.Listen(":" + cfg.AppPort); err != nil {

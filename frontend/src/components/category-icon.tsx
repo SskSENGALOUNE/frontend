@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { colorFor, iconFor } from "@/lib/category-icons";
 
 const SIZES = {
+  xs: { box: "size-6", icon: "size-3.5" },
   sm: { box: "size-8", icon: "size-4" },
   md: { box: "size-10", icon: "size-5" },
   lg: { box: "size-12", icon: "size-6" },

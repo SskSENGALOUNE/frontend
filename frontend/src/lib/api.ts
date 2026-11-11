@@ -28,6 +28,7 @@ export interface Transaction {
   txn_date: string;
   note: string | null;
   recurring_id: string | null;
+  goal_id: string | null;
 }
 
 export interface TransactionList {
@@ -98,6 +99,33 @@ export interface Recurring {
   generated_count: number;
   next_run_date: string;
   active: boolean;
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  target_amount: number;
+  category_id: string;
+  saved: number;
+  deposit_count: number;
+  /** automatic deposit on each payday, or null */
+  monthly_amount: number | null;
+  next_deposit: string | null;
+}
+
+export interface Favorite {
+  id: string;
+  type: TxnType;
+  category_id: string;
+  category_name: string;
+  amount: number;
+  note: string | null;
+}
+
+export interface FrequentAmounts {
+  category_id: string;
+  /** most used amounts in the last 180 days, smallest first */
+  amounts: number[];
 }
 
 export class ApiError extends Error {
@@ -178,6 +206,7 @@ const MESSAGES: Record<string, string> = {
   "missing bearer token": "ກະລຸນາເຂົ້າສູ່ລະບົບໃໝ່",
   "internal server error": "ລະບົບຂັດຂ້ອງ ລອງໃໝ່ອີກຄັ້ງ",
   "end_date must not be before start_date": "ວັນສິ້ນສຸດຕ້ອງບໍ່ກ່ອນວັນເລີ່ມ",
+  "limit reached": "ຄົບຈຳນວນສູງສຸດແລ້ວ ລຶບອັນເກົ່າອອກກ່ອນ",
 };
 
 const FIELD_NAMES: Record<string, string> = {
@@ -191,6 +220,8 @@ const FIELD_NAMES: Record<string, string> = {
   note: "ໝາຍເຫດ",
   start_date: "ວັນເລີ່ມ",
   end_date: "ວັນສິ້ນສຸດ",
+  target_amount: "ຍອດເປົ້າໝາຍ",
+  monthly_amount: "ຍອດອອມຕໍ່ເດືອນ",
 };
 
 /** Lao, human-readable message for an error, including field errors. */

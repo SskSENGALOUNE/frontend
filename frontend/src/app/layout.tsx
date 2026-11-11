@@ -18,6 +18,9 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Money Manager",
   description: "ບັນທຶກລາຍຮັບ ລາຍຈ່າຍ ແລະ ເບິ່ງລາຍງານ",
+  applicationName: "Money Manager",
+  // iOS ignores most of the manifest; these make "Add to Home Screen" open full screen.
+  appleWebApp: { capable: true, title: "Money", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

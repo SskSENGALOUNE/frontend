@@ -183,14 +183,14 @@ func (r *RecurringRepository) GenerateDue(ctx context.Context, today time.Time) 
 	type due struct {
 		id, userID, typ, categoryID, frequency string
 		amount                                 float64
-		note                                   *string
+		note, goalID                           *string
 		start                                  time.Time
 		end                                    *time.Time
 		runCount                               int
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, user_id, type, category_id, amount, note, frequency, start_date, end_date, run_count
+		SELECT id, user_id, type, category_id, amount, note, goal_id, frequency, start_date, end_date, run_count
 		FROM recurring_transactions
 		WHERE active AND next_run_date <= $1::date
 		FOR UPDATE SKIP LOCKED`, today.Format(dateLayout))
@@ -200,7 +200,7 @@ func (r *RecurringRepository) GenerateDue(ctx context.Context, today time.Time) 
 	var items []due
 	for rows.Next() {
 		var d due
-		if err := rows.Scan(&d.id, &d.userID, &d.typ, &d.categoryID, &d.amount, &d.note,
+		if err := rows.Scan(&d.id, &d.userID, &d.typ, &d.categoryID, &d.amount, &d.note, &d.goalID,
 			&d.frequency, &d.start, &d.end, &d.runCount); err != nil {
 			rows.Close()
 			return 0, err
@@ -219,10 +219,10 @@ func (r *RecurringRepository) GenerateDue(ctx context.Context, today time.Time) 
 		next := Occurrence(d.start, d.frequency, n)
 		for !next.After(todayDate) && (d.end == nil || !next.After(*d.end)) {
 			tag, err := tx.Exec(ctx,
-				`INSERT INTO transactions (user_id, type, category_id, amount, txn_date, note, recurring_id)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7)
+				`INSERT INTO transactions (user_id, type, category_id, amount, txn_date, note, recurring_id, goal_id)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 				 ON CONFLICT (recurring_id, txn_date) DO NOTHING`,
-				d.userID, d.typ, d.categoryID, d.amount, next, d.note, d.id)
+				d.userID, d.typ, d.categoryID, d.amount, next, d.note, d.id, d.goalID)
 			if err != nil {
 				return 0, err
 			}

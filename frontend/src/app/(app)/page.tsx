@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowDownRight, ArrowUpRight, ChevronRight, NotebookPen, Plus } from "lucide-react";
-import type { BudgetStatus, Category, CategoryTotal, PeriodTotal, Summary, TransactionList } from "@/lib/api";
+import { ArrowDownRight, ArrowUpRight, ChevronRight, NotebookPen, PiggyBank, Plus } from "lucide-react";
+import type { BudgetStatus, Category, CategoryTotal, Goal, PeriodTotal, Summary, TransactionList } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { currentMonth, dayHeading, money, monthRange, today } from "@/lib/format";
+import { currentMonth, dayHeading, money, monthRange, shiftMonth, today } from "@/lib/format";
+import { goalPercent } from "@/lib/goals";
 import { useData } from "@/lib/use-data";
 import { currencyLabel } from "@/components/amount-input";
 import { CategoryIcon } from "@/components/category-icon";
-import { ExpenseChart } from "@/components/trend-chart";
+import { ExpenseChart, PeriodChart } from "@/components/trend-chart";
 import { Bar, budgetTone, EmptyState, ErrorState, ListSkeleton, Money, MonthPicker, Row, Skeleton } from "@/components/ui";
 
 interface SummaryRes {
@@ -33,6 +34,13 @@ export default function Dashboard() {
   const budget = useData<BudgetRes>(`/reports/budget?month=${month}`);
   const recent = useData<TransactionList>(`/transactions?${q}&limit=5`);
   const allCats = useData<Category[]>("/categories");
+  // the 12 pay periods ending with the selected one, and the previous period for per-category change
+  const yearFrom = monthRange(shiftMonth(month, -11)).from;
+  const yearly = useData<{ items: PeriodTotal[] }>(`/reports/trend?period=month&from=${yearFrom}&to=${to}`);
+  const prev = monthRange(shiftMonth(month, -1));
+  const prevCats = useData<{ items: CategoryTotal[] }>(`/reports/by-category?type=expense&from=${prev.from}&to=${prev.to}`);
+  const goals = useData<Goal[]>("/goals");
+  const prevTotal = new Map((prevCats.data?.items ?? []).map((c) => [c.category_id, c.total]));
   const catById = new Map((allCats.data ?? []).map((c) => [c.id, c]));
 
   const failed = sum.error || trend.error || cats.error || budget.error || recent.error;
@@ -112,7 +120,10 @@ export default function Dashboard() {
                           <CategoryIcon icon={meta?.icon} color={meta?.color ?? c.color} name={c.category_name} />
                           <div className="flex min-w-0 flex-1 flex-col gap-1">
                             <div className="flex justify-between gap-2 text-sm">
-                              <span className="truncate">{c.category_name}</span>
+                              <span className="flex min-w-0 items-baseline gap-1.5">
+                                <span className="truncate">{c.category_name}</span>
+                                <Change now={c.total} before={prevTotal.get(c.category_id)} />
+                              </span>
                               <Money value={c.total} />
                             </div>
                             <div className="flex items-center gap-2">
@@ -131,7 +142,11 @@ export default function Dashboard() {
             </>
           )}
 
+          <YearCard items={yearly.data?.items} current={month} />
+
           <BudgetCard data={budget.data} catById={catById} />
+
+          <GoalsCard goals={goals.data} />
 
           {!empty && (
             <section className="card flex flex-col gap-1 p-2">
@@ -192,6 +207,109 @@ function Tile({ label, type, value, prev }: { label: string; type: "income" | "e
         ເດືອນກ່ອນ <span className="num">{prev !== undefined ? money(prev) : "–"}</span> {diff}
       </span>
     </div>
+  );
+}
+
+/** Spending change against the previous pay period; more spending is shown as bad. */
+function Change({ now, before }: { now: number; before?: number }) {
+  if (!before) return null; // nothing spent here last period, or not loaded yet
+  const pct = Math.round(((now - before) / before) * 100);
+  if (pct === 0) return null;
+  const up = pct > 0;
+  const Arrow = up ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span className={`inline-flex shrink-0 items-center text-xs ${up ? "text-expense" : "text-income"}`} title="ທຽບກັບເດືອນກ່ອນ">
+      <Arrow className="size-3.5" aria-hidden />
+      <span className="num">{Math.abs(pct)}%</span>
+      <span className="sr-only">{up ? "ເພີ່ມຂຶ້ນ" : "ຫຼຸດລົງ"}ຈາກເດືອນກ່ອນ</span>
+    </span>
+  );
+}
+
+function YearCard({ items, current }: { items?: PeriodTotal[]; current: string }) {
+  if (!items) return <Skeleton className="h-56" />;
+  const withData = items.filter((i) => i.income > 0 || i.expense > 0);
+  if (withData.length < 2) return null; // nothing to compare yet
+  const avg = (f: (i: PeriodTotal) => number) => withData.reduce((sum, i) => sum + f(i), 0) / withData.length;
+  const net = withData.reduce((sum, i) => sum + i.net, 0);
+  return (
+    <section className="card flex flex-col gap-3" aria-label="12 ເດືອນຫຼ້າສຸດ">
+      <h2 className="font-semibold">12 ເດືອນຫຼ້າສຸດ</h2>
+      <PeriodChart items={items} current={current} />
+      <dl className="grid grid-cols-3 gap-2 text-xs">
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-muted">ລາຍຮັບສະເລ່ຍ</dt>
+          <dd className="num text-sm font-medium">{money(Math.round(avg((i) => i.income)))}</dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-muted">ລາຍຈ່າຍສະເລ່ຍ</dt>
+          <dd className="num text-sm font-medium">{money(Math.round(avg((i) => i.expense)))}</dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-muted">ເຫຼືອລວມ</dt>
+          <dd className={`num text-sm font-medium ${net < 0 ? "text-expense" : ""}`}>{money(net)}</dd>
+        </div>
+      </dl>
+      <details className="text-sm">
+        <summary className="flex min-h-11 cursor-pointer items-center text-accent">ເບິ່ງເປັນຕາຕະລາງ</summary>
+        <table className="num w-full text-right text-xs">
+          <thead className="text-muted">
+            <tr>
+              <th className="py-1 text-left font-normal">ເດືອນ</th>
+              <th className="py-1 font-normal">ລາຍຮັບ</th>
+              <th className="py-1 font-normal">ລາຍຈ່າຍ</th>
+              <th className="py-1 font-normal">ເຫຼືອ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...items].reverse().map((i) => (
+              <tr key={i.period} className="border-t border-line">
+                <td className="py-1 text-left">{i.period}</td>
+                <td className="py-1">{money(i.income)}</td>
+                <td className="py-1">{money(i.expense)}</td>
+                <td className={`py-1 ${i.net < 0 ? "text-expense" : ""}`}>{money(i.net)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </section>
+  );
+}
+
+function GoalsCard({ goals }: { goals: Goal[] | null }) {
+  if (!goals || goals.length === 0) return null;
+  return (
+    <section className="card flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">ເປົ້າໝາຍອອມ</h2>
+        <Link href="/goals" className="flex min-h-11 items-center gap-0.5 text-sm text-accent">
+          ທັງໝົດ <ChevronRight className="size-4" aria-hidden />
+        </Link>
+      </div>
+      <ul className="flex flex-col gap-3">
+        {goals.slice(0, 3).map((g) => {
+          const pct = goalPercent(g);
+          const done = g.saved >= g.target_amount;
+          return (
+            <li key={g.id} className="flex items-center gap-3">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-bg text-accent">
+                <PiggyBank className="size-4" aria-hidden />
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="truncate">{g.name}</span>
+                  <span className="num text-xs text-muted">
+                    {money(g.saved)} / {money(g.target_amount)}
+                  </span>
+                </div>
+                <Bar percent={pct} tone={done ? "income" : "accent"} label={g.name} />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

@@ -5,16 +5,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight,
+  History,
   ListPlus,
   NotebookPen,
   ShoppingBasket,
+  Star,
   X,
 } from "lucide-react";
 import {
   ApiError,
+  del,
   errorText,
   post,
   type Category,
+  type Favorite,
+  type FrequentAmounts,
   type Transaction,
   type TransactionList,
 } from "@/lib/api";
@@ -57,6 +62,7 @@ import {
 import { useToast } from "@/components/toast";
 
 const USAGE_KEY = "mm_category_usage";
+/** Shown when the chosen category has no history yet; learned amounts come first otherwise. */
 const QUICK_AMOUNTS = [
   "5000",
   "10000",
@@ -66,6 +72,17 @@ const QUICK_AMOUNTS = [
   "50000",
   "100000",
 ];
+const MAX_QUICK = 7;
+
+/** The category's most used amounts first, then the defaults, without duplicates. */
+function quickAmounts(learned: number[] | undefined): { value: string; learned: boolean }[] {
+  const out = (learned ?? []).map((a) => ({ value: String(a), learned: true }));
+  for (const q of QUICK_AMOUNTS) {
+    if (out.length >= MAX_QUICK) break;
+    if (!out.some((o) => o.value === q)) out.push({ value: q, learned: false });
+  }
+  return out.slice(0, MAX_QUICK);
+}
 
 export default function EntryPage() {
   const router = useRouter();
@@ -77,6 +94,11 @@ export default function EntryPage() {
   const todays = useData<TransactionList>(
     `/transactions?from=${todayStr}&to=${todayStr}&limit=5`,
   );
+  const favorites = useData<Favorite[]>("/favorites");
+  const frequent = useData<{ items: FrequentAmounts[] }>(
+    "/reports/frequent-amounts",
+  );
+  const [editingFavorites, setEditingFavorites] = useState(false);
 
   const [type, setType] = useState<"expense" | "income">("expense");
   const [categoryId, setCategoryId] = useState("");
@@ -114,6 +136,71 @@ export default function EntryPage() {
       ...list.filter((c) => !top.includes(c.id)),
     ];
   }, [cats.data, type, usage, byId]);
+
+  const learnedByCat = useMemo(
+    () =>
+      new Map((frequent.data?.items ?? []).map((f) => [f.category_id, f.amounts])),
+    [frequent.data],
+  );
+  const chips = quickAmounts(categoryId ? learnedByCat.get(categoryId) : undefined);
+  const typeFavorites = (favorites.data ?? []).filter((f) => f.type === type);
+  const parsedAmount = parseAmount(amount);
+  const isFavorite = typeFavorites.some(
+    (f) =>
+      f.category_id === categoryId &&
+      f.amount === parsedAmount &&
+      (f.note ?? "") === note.trim(),
+  );
+
+  /** Expense favorites go straight into the basket; an income favorite fills the form. */
+  function applyFavorite(f: Favorite) {
+    if (type === "income") {
+      setCategoryId(f.category_id);
+      setAmount(String(f.amount));
+      setNote(f.note ?? "");
+      setShowNote(!!f.note);
+      setFormError({});
+      return;
+    }
+    if (!canAdd(basket))
+      return setFormError({ text: `ໃສ່ໄດ້ສູງສຸດ ${MAX_BASKET} ລາຍການຕໍ່ຄັ້ງ` });
+    setBasket((b) => [
+      ...b,
+      {
+        key: String(nextKey.current++),
+        category_id: f.category_id,
+        amount: f.amount,
+        txn_date: date,
+        ...(f.note ? { note: f.note } : {}),
+      },
+    ]);
+    navigator.vibrate?.(10);
+  }
+
+  async function saveFavorite() {
+    if (!categoryId || parsedAmount === null) return;
+    try {
+      await post<Favorite>("/favorites", {
+        type,
+        category_id: categoryId,
+        amount: parsedAmount,
+        note: note.trim() || null,
+      });
+      toast("ເພີ່ມເປັນລາຍການໂປດແລ້ວ");
+      favorites.reload();
+    } catch (err) {
+      setFormError({ text: errorText(err) });
+    }
+  }
+
+  async function removeFavorite(f: Favorite) {
+    try {
+      await del(`/favorites/${f.id}`);
+      favorites.reload();
+    } catch (err) {
+      setFormError({ text: errorText(err) });
+    }
+  }
 
   function switchType(t: "expense" | "income") {
     setType(t);
@@ -223,6 +310,7 @@ export default function EntryPage() {
       setBasket([]);
       resetForm();
       todays.reload();
+      frequent.reload();
     } catch (err) {
       if (type === "expense" && err instanceof ApiError) {
         if (basket.length !== items.length) {
@@ -267,6 +355,56 @@ export default function EntryPage() {
               save();
             }}
           >
+            {typeFavorites.length > 0 && (
+              <section className="flex flex-col gap-2" aria-label="ລາຍການໂປດ">
+                <div className="flex items-center justify-between">
+                  <h2 className="flex items-center gap-1 text-sm text-muted">
+                    <Star className="size-4" aria-hidden />
+                    ລາຍການໂປດ
+                    {isExpense && !editingFavorites && (
+                      <span className="text-xs"> · ແຕະເພື່ອໃສ່ລາຍການ</span>
+                    )}
+                  </h2>
+                  <button
+                    type="button"
+                    className="min-h-11 px-2 text-sm text-accent"
+                    onClick={() => setEditingFavorites((v) => !v)}
+                  >
+                    {editingFavorites ? "ແລ້ວ" : "ແກ້ໄຂ"}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2" data-testid="favorites">
+                  {typeFavorites.map((f) => {
+                    const c = byId.get(f.category_id);
+                    const label = `${f.note || f.category_name} ${money(f.amount)}`;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        className={`chip max-w-full ${editingFavorites ? "border-expense" : ""}`}
+                        onClick={() =>
+                          editingFavorites ? removeFavorite(f) : applyFavorite(f)
+                        }
+                        aria-label={editingFavorites ? `ລຶບ ${label}` : label}
+                      >
+                        <CategoryIcon
+                          icon={c?.icon}
+                          color={c?.color}
+                          name={f.category_name}
+                          size="xs"
+                        />
+                        <span className="truncate">{f.note || f.category_name}</span>
+                        <span className="num text-muted">{money(f.amount)}</span>
+                        {editingFavorites && (
+                          <X className="size-4 text-expense" aria-hidden />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
             <div className="flex flex-col gap-2">
               <AmountInput
                 id="amount"
@@ -278,14 +416,18 @@ export default function EntryPage() {
                 invalid={formError.amount}
               />
               <div className="flex flex-wrap gap-2" aria-label="ຈຳນວນດ່ວນ">
-                {QUICK_AMOUNTS.map((q) => (
+                {chips.map((q) => (
                   <button
-                    key={q}
+                    key={q.value}
                     type="button"
-                    className={`chip num ${amount === q ? "chip-on" : ""}`}
-                    onClick={() => setAmount(q)}
+                    className={`chip num ${amount === q.value ? "chip-on" : ""}`}
+                    onClick={() => setAmount(q.value)}
+                    title={q.learned ? "ຍອດທີ່ໃຊ້ບ່ອຍໃນໝວດນີ້" : undefined}
                   >
-                    {formatAmountInput(q)}
+                    {q.learned && (
+                      <History className="size-3.5 text-muted" aria-label="ໃຊ້ບ່ອຍ" />
+                    )}
+                    {formatAmountInput(q.value)}
                   </button>
                 ))}
               </div>
@@ -351,6 +493,20 @@ export default function EntryPage() {
                 >
                   <NotebookPen className="size-4" aria-hidden />
                   ໝາຍເຫດ
+                </button>
+              )}
+              {categoryId && parsedAmount !== null && (
+                <button
+                  type="button"
+                  className={`chip ${isFavorite ? "chip-on" : ""}`}
+                  onClick={saveFavorite}
+                  disabled={isFavorite}
+                >
+                  <Star
+                    className={`size-4 ${isFavorite ? "fill-current" : ""}`}
+                    aria-hidden
+                  />
+                  {isFavorite ? "ຢູ່ໃນລາຍການໂປດ" : "ເພີ່ມເປັນລາຍການໂປດ"}
                 </button>
               )}
             </div>

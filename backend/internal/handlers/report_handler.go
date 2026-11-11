@@ -81,7 +81,8 @@ func (h *ReportHandler) ByCategory(c *fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"from": from, "to": to, "type": typ, "items": items})
 }
 
-// Trend: GET /reports/trend?period=day|month&from=&to=  (every period is present, zero-filled)
+// Trend: GET /reports/trend?period=day|month&from=&to=  (every period is present, zero-filled;
+// "month" means pay period, named by the month it ends in)
 func (h *ReportHandler) Trend(c *fiber.Ctx) error {
 	period := c.Query("period", "day")
 	if period != "day" && period != "month" {
@@ -101,6 +102,17 @@ func (h *ReportHandler) Trend(c *fiber.Ctx) error {
 		return repoError(c, err)
 	}
 	return response.OK(c, fiber.Map{"from": from, "to": to, "period": period, "items": items})
+}
+
+// FrequentAmounts: GET /reports/frequent-amounts — per category, the 5 amounts used most
+// often in the last 180 days (smallest first), for the quick-amount buttons on the entry page.
+func (h *ReportHandler) FrequentAmounts(c *fiber.Ctx) error {
+	since := time.Now().In(h.loc).AddDate(0, 0, -180).Format(dateLayout)
+	items, err := h.repo.FrequentAmounts(c.Context(), middleware.UserID(c), since, 5)
+	if err != nil {
+		return repoError(c, err)
+	}
+	return response.OK(c, fiber.Map{"items": items})
 }
 
 // Budget: GET /reports/budget?month=YYYY-MM — budget vs actual spending per category

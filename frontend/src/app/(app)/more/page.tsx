@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarSync, ChevronRight, LogOut, Tags, UserRound, type LucideIcon } from "lucide-react";
+import { CalendarSync, ChevronRight, LogOut, PiggyBank, Tags, UserRound, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 const LINKS: { href: string; label: string; hint: string; icon: LucideIcon }[] = [
+  { href: "/goals", label: "ເປົ້າໝາຍອອມ", hint: "ອອມເງິນຊື້ຂອງ, ກັນເງິນອັດຕະໂນມັດທຸກວັນເງິນເດືອນ", icon: PiggyBank },
   { href: "/recurring", label: "ລາຍການປະຈຳ", hint: "ເງິນເດືອນ, ຄ່າເຊົ່າ ແລະ ລາຍການທີ່ເກີດຊ້ຳ", icon: CalendarSync },
   { href: "/categories", label: "ໝວດ", hint: "ເພີ່ມ, ແກ້ຊື່, ປ່ຽນໄອຄອນ ແລະ ສີ", icon: Tags },
   { href: "/profile", label: "ໂປຣໄຟລ໌", hint: "ຊື່, ສະກຸນເງິນ, ລະຫັດຜ່ານ", icon: UserRound },

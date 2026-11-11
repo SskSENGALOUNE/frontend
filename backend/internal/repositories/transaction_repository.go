@@ -30,14 +30,14 @@ func NewTransactionRepository(db *pgxpool.Pool) *TransactionRepository {
 
 const transactionSelect = `
 	SELECT t.id, t.user_id, t.type, t.category_id, c.name, c.color, c.icon, t.amount,
-	       to_char(t.txn_date, 'YYYY-MM-DD'), t.note, t.recurring_id, t.created_at, t.updated_at
+	       to_char(t.txn_date, 'YYYY-MM-DD'), t.note, t.recurring_id, t.goal_id, t.created_at, t.updated_at
 	FROM transactions t
 	JOIN categories c ON c.id = t.category_id`
 
 func scanTransaction(row pgx.Row) (*models.Transaction, error) {
 	t := &models.Transaction{}
 	err := row.Scan(&t.ID, &t.UserID, &t.Type, &t.CategoryID, &t.CategoryName, &t.CategoryColor,
-		&t.CategoryIcon, &t.Amount, &t.TxnDate, &t.Note, &t.RecurringID, &t.CreatedAt, &t.UpdatedAt)
+		&t.CategoryIcon, &t.Amount, &t.TxnDate, &t.Note, &t.RecurringID, &t.GoalID, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return nil, notFound(err)
 	}
@@ -116,9 +116,9 @@ func (r *TransactionRepository) Get(ctx context.Context, userID, id string) (*mo
 func (r *TransactionRepository) Create(ctx context.Context, t *models.Transaction) (*models.Transaction, error) {
 	var id string
 	err := r.db.QueryRow(ctx,
-		`INSERT INTO transactions (user_id, type, category_id, amount, txn_date, note)
-		 VALUES ($1, $2, $3, $4, $5::date, $6) RETURNING id`,
-		t.UserID, t.Type, t.CategoryID, t.Amount, t.TxnDate, t.Note).Scan(&id)
+		`INSERT INTO transactions (user_id, type, category_id, amount, txn_date, note, goal_id)
+		 VALUES ($1, $2, $3, $4, $5::date, $6, $7) RETURNING id`,
+		t.UserID, t.Type, t.CategoryID, t.Amount, t.TxnDate, t.Note, t.GoalID).Scan(&id)
 	if isFKViolation(err) {
 		return nil, ErrInvalidCategory
 	}

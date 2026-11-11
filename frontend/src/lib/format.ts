@@ -65,6 +65,11 @@ export function monthRangeLabel(month: string): string {
   return `${short(from)} – ${short(to)}`;
 }
 
+/** "2026-11" -> "11", for tight chart axes. */
+export function monthNumber(month: string): string {
+  return String(Number(month.slice(5, 7)));
+}
+
 export function dateLabel(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   return `${d} ${LAO_MONTHS[m - 1]} ${y}`;

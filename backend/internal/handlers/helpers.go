@@ -36,6 +36,8 @@ func repoError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusBadRequest, "category not found or its type does not match")
 	case errors.Is(err, repositories.ErrInUse):
 		return response.Error(c, fiber.StatusConflict, "still in use")
+	case errors.Is(err, repositories.ErrTooMany):
+		return response.Error(c, fiber.StatusConflict, "limit reached")
 	default:
 		log.Printf("%s %s: %v", c.Method(), c.Path(), err)
 		return response.Error(c, fiber.StatusInternalServerError, "internal server error")
@@ -54,7 +56,7 @@ func today(loc *time.Location) string { return time.Now().In(loc).Format(dateLay
 
 // payDay is the day salary arrives. A "month" in reports and budgets is the pay period that ends
 // in that month: month 2026-11 covers 2026-10-25 .. 2026-11-24.
-const payDay = 25
+const payDay = repositories.PayDay
 
 // currentPeriodMonth returns the first day of the month whose pay period contains now.
 func currentPeriodMonth(loc *time.Location) time.Time {

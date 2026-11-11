@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarSync, ChartPie, House, ListOrdered, LogOut, Menu, Plus, Tags, Target, UserRound, type LucideIcon } from "lucide-react";
+import { CalendarSync, ChartPie, House, ListOrdered, LogOut, Menu, PiggyBank, Plus, Tags, Target, UserRound, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 interface NavItem {
@@ -22,12 +22,13 @@ const SIDEBAR: NavItem[] = [
   { href: "/", label: "ພາບລວມ", icon: House },
   { href: "/transactions", label: "ລາຍການ", icon: ListOrdered },
   { href: "/budgets", label: "ງົບປະມານ", icon: Target },
+  { href: "/goals", label: "ເປົ້າໝາຍອອມ", icon: PiggyBank },
   { href: "/recurring", label: "ລາຍການປະຈຳ", icon: CalendarSync },
   { href: "/categories", label: "ໝວດ", icon: Tags },
   { href: "/profile", label: "ໂປຣໄຟລ໌", icon: UserRound },
 ];
 
-const MORE_PATHS = ["/more", "/recurring", "/categories", "/profile"];
+const MORE_PATHS = ["/more", "/goals", "/recurring", "/categories", "/profile"];
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
