@@ -277,15 +277,12 @@ export default function EntryPage() {
                 currency={currency}
                 invalid={formError.amount}
               />
-              <div
-                className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
-                aria-label="ຈຳນວນດ່ວນ"
-              >
+              <div className="flex flex-wrap gap-2" aria-label="ຈຳນວນດ່ວນ">
                 {QUICK_AMOUNTS.map((q) => (
                   <button
                     key={q}
                     type="button"
-                    className={`chip num shrink-0 ${amount === q ? "chip-on" : ""}`}
+                    className={`chip num ${amount === q ? "chip-on" : ""}`}
                     onClick={() => setAmount(q)}
                   >
                     {formatAmountInput(q)}
